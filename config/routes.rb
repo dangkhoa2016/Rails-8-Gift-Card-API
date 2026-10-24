@@ -1,4 +1,6 @@
 Rails.application.routes.draw do
+  # Optional reviewer UI: static Vue 3 global build, no frontend pipeline.
+  get "demo", to: redirect("/demo/index.html")
   get "up" => "rails/health#show", as: :rails_health_check
 
   namespace :api do
