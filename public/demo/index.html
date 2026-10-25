@@ -174,30 +174,102 @@
         </div>
       </section>
 
-      <section v-if="tab==='grants'" class="two-col">
-        <div class="panel"><span class="kicker">ACCESS CONTROL</span><h2>Grant product access</h2>
-          <p class="muted">Each grant associates a client with an eligible gift card product.</p>
-          <form class="stack" @submit.prevent="grantAccess">
-            <label>Client<select v-model="clientId" @change="loadGrants" required><option value="" disabled>Select client</option>
-              <option v-for="c in clients" :key="c.id" :value="c.id">{{c.email}}</option></select></label>
-            <label>Brand<select v-model="brandId" @change="loadProducts" required><option value="" disabled>Select brand</option>
-              <option v-for="b in brands" :key="b.id" :value="b.id">{{b.name}}</option></select></label>
-            <label>Product<select v-model="grantProductId" required><option value="" disabled>Select product</option>
-              <option v-for="p in products.filter(x=>!x.deleted_at)" :key="p.id" :value="p.id">{{p.name}} — {{money(p.face_value,p.currency)}}</option></select></label>
-            <button :class="['btn','primary',{processing:submitting}]" :disabled="busy">Grant access</button>
-          </form>
+      <section v-if="tab==='grants'" class="access-workspace">
+        <div class="panel access-client-panel">
+          <div class="access-intro">
+            <div><span class="kicker">STEP 01 · CHOOSE AN ACCOUNT</span><h2>Who should have access?</h2>
+              <p class="muted">Select a Client to manage which gift card products they can issue. No changes are made until you grant or revoke access.</p></div>
+            <span class="access-step-icon" aria-hidden="true">01</span>
+          </div>
+          <div class="access-client-controls">
+            <label for="access-client-search">Find a Client
+              <input id="access-client-search" ref="accessClientSearch" type="search" v-model.trim="accessClientQuery"
+                @focus="accessPickerOpen=true" @input="accessPickerOpen=true" @keydown.esc.prevent.stop="accessPickerOpen=false"
+                :aria-expanded="accessPickerOpen" aria-controls="access-client-results"
+                placeholder="Type an email address to find a Client…" autocomplete="off"></label>
+            <button v-if="accessClient" type="button" class="btn outline access-change-client" :disabled="busy" @click="openAccessPicker">Change Client</button>
+          </div>
+          <div v-if="accessPickerOpen" id="access-client-results" class="access-client-results" role="region" aria-label="Client search results">
+            <div class="access-search-summary" role="status" aria-live="polite">
+              <span>{{matchingAccessClients.length}} matching {{matchingAccessClients.length===1?'Client':'Clients'}} · Showing up to 8</span>
+              <button type="button" class="text-btn" @click="accessClientQuery='';$refs.accessClientSearch.focus()" v-if="accessClientQuery">Clear search</button>
+              <button type="button" class="text-btn" @click="accessPickerOpen=false">Close</button>
+            </div>
+            <div class="access-client-matches" v-if="matchingAccessClients.length" role="group" aria-label="Matching Clients">
+              <button v-for="c in matchingAccessClients.slice(0,8)" :key="c.id" type="button"
+                :class="['access-client-option',{selected:c.id===Number(clientId)}]" :disabled="busy"
+                :aria-label="'Select Client '+c.email" :aria-pressed="c.id===Number(clientId)" @click="chooseAccessClient(c.id)">
+                <span class="access-client-option-avatar" aria-hidden="true">{{c.email.slice(0,1).toUpperCase()}}</span>
+                <span class="access-client-option-copy"><strong>{{c.email}}</strong><small>Client #{{c.id}} · {{c.active?'Active':'Disabled'}}</small></span>
+                <span v-if="c.id===Number(clientId)" class="access-client-current">Selected ✓</span>
+                <span v-else class="access-client-select-action">Select →</span>
+              </button>
+            </div>
+            <div v-else class="access-empty">No Clients match this email search. Try a different term or clear the search.</div>
+            <p v-if="matchingAccessClients.length>8" class="access-more-results">Showing the first 8 matches. Refine your email search to find other Clients.</p>
+            <p class="access-search-scope">Searches the first 100 Clients loaded in this workspace.</p>
+          </div>
+          <div v-if="!clientId" class="access-hint" role="status">Use Find a Client above, then select an account from the matching results.</div>
+          <div v-else-if="accessClient" class="access-client-context">
+            <div class="access-client-avatar" aria-hidden="true">{{accessClient.email.slice(0,1).toUpperCase()}}</div>
+            <div class="access-client-details"><strong>{{accessClient.email}}</strong><span>Client #{{accessClient.id}} · Payout {{accessClient.payout_rate}}%</span></div>
+            <span :class="['pill',accessClient.active?'active':'inactive']">{{accessClient.active?'Active':'Disabled'}}</span>
+            <a class="entity-link" :href="entityHref('clients',accessClient.id)" @click.prevent="navigateTo('clients',accessClient.id)">View Client →</a>
+          </div>
+          <p v-if="accessClient && !accessClient.active" class="access-caution">This Client is disabled. Permissions can be managed, but the account cannot issue cards until reactivated.</p>
         </div>
-        <div class="panel"><span class="kicker">CLIENT ENTITLEMENTS</span><h2>Active grants <em>{{grants.length}}</em></h2>
-          <p class="muted">Viewing access for <a v-if="clientId" class="entity-link" :href="entityHref('clients',clientId)" @click.prevent="navigateTo('clients',clientId)">{{clientName(clientId)}}</a></p>
-          <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>Product</th><th>Brand</th><th>Value</th><th>Client</th><th>Action</th></tr></thead><tbody>
-            <tr v-for="g in grants" :key="g.id"><td><a class="entity-link" :href="entityHref('products',g.product_id)" @click.prevent="navigateTo('products',g.product_id)">{{g.product_name}}</a><small>Product ID: {{g.product_id}}</small></td>
-              <td><a class="entity-link" :href="entityHref('brands',g.brand_id)" @click.prevent="navigateTo('brands',g.brand_id)">{{g.brand_name}}</a></td>
-              <td>{{money(g.product_face_value,g.product_currency)}}</td>
-              <td><a class="entity-link" :href="entityHref('clients',g.client_id)" @click.prevent="navigateTo('clients',g.client_id)">{{g.client_email}}</a></td>
-              <td><button class="text-btn dangerous" :disabled="busy" @click="revokeAccess(g)">Revoke</button></td></tr>
-            <tr v-if="!grants.length"><td class="empty" colspan="5">No grants for selected client</td></tr>
-          </tbody></table></div>
-        </div>
+
+        <template v-if="clientId && accessClient">
+          <div class="access-overview" aria-live="polite">
+            <div class="access-stat"><span>Granted products</span><strong>{{grants.length}}</strong><small>Across all brands</small></div>
+            <div class="access-stat"><span>Available to add</span><strong>{{availableAccessProducts.length}}</strong><small>Within selected brand and search</small></div>
+            <div class="access-stat access-stat-tip"><strong>How it works</strong><small>Grant to allow future issuance. Revoke to block new issuance; existing cards are preserved.</small></div>
+          </div>
+          <div class="access-columns">
+            <div class="panel access-panel">
+              <div class="access-panel-heading"><div><span class="kicker">STEP 02 · ADD PERMISSIONS</span><h2>Available products <em>{{availableAccessProducts.length}}</em></h2></div><span class="access-panel-symbol" aria-hidden="true">+</span></div>
+              <p class="muted">Browse one Brand at a time. Products already granted to this Client are removed from this list.</p>
+              <div class="access-filters">
+                <label for="access-brand-filter">Brand
+                  <select id="access-brand-filter" v-model="brandId" @change="loadProducts" :disabled="busy"><option value="">Choose a Brand…</option>
+                    <option v-for="b in brands" :key="b.id" :value="b.id">{{b.name}}{{b.state==='inactive'?' (inactive)':''}}</option></select></label>
+                <label for="access-product-search">Find a product
+                  <input id="access-product-search" type="search" v-model.trim="accessProductQuery" placeholder="Product name, currency or value" autocomplete="off"></label>
+              </div>
+              <div :class="['access-list',{'is-loading':loadingTable}]" aria-label="Available products">
+                <div v-for="p in availableAccessProducts" :key="p.id" class="access-item">
+                  <div class="access-item-copy"><div class="access-item-top"><span class="access-product-glyph" aria-hidden="true">◇</span><a class="entity-link access-item-title" :href="entityHref('products',p.id)" @click.prevent="navigateTo('products',p.id)">{{p.name}}</a></div>
+                    <span class="access-item-meta">{{brandName(p.brand_id)}} · {{money(p.face_value,p.currency)}}</span>
+                    <span v-if="p.state!=='active'||brands.find(b=>b.id===p.brand_id)?.state!=='active'" class="access-warning">Inactive Product or Brand · issuance is unavailable</span>
+                  </div>
+                  <button type="button" :class="['btn','primary','small',{processing:submitting}]" :disabled="busy" :aria-label="'Grant access to '+p.name" @click="grantAccess(p)">+ Grant</button>
+                </div>
+                <div v-if="!brandId" class="access-empty">Choose a Brand to browse its products.</div>
+                <div v-else-if="!availableAccessProducts.length" class="access-empty">No products to add. Try another Brand, clear your search, or review the granted products.</div>
+              </div>
+            </div>
+
+            <div class="panel access-panel">
+              <div class="access-panel-heading"><div><span class="kicker">STEP 03 · REVIEW PERMISSIONS</span><h2>Granted products <em>{{grants.length}}</em></h2></div><span class="access-panel-symbol checked" aria-hidden="true">✓</span></div>
+              <p class="muted">All products currently assigned to this Client, across every Brand. Revoke an individual permission when needed.</p>
+              <label for="access-grant-search" class="access-grant-filter">Search granted products
+                <input id="access-grant-search" type="search" v-model.trim="accessGrantQuery" placeholder="Search product, brand or currency" autocomplete="off"></label>
+              <div :class="['access-list',{'is-loading':loadingTable}]" aria-label="Granted products">
+                <div v-for="g in matchingAccessGrants" :key="g.id" class="access-item">
+                  <div class="access-item-copy"><div class="access-item-top"><span class="access-granted-icon" aria-hidden="true">✓</span>
+                    <a class="entity-link access-item-title" :href="entityHref('products',g.product_id)" @click.prevent="navigateTo('products',g.product_id)">{{g.product_name}}</a></div>
+                    <span class="access-item-meta"><a class="entity-link" :href="entityHref('brands',g.brand_id)" @click.prevent="navigateTo('brands',g.brand_id)">{{g.brand_name}}</a> · {{money(g.product_face_value,g.product_currency)}}</span>
+                    <span class="access-item-note">Granted to <a class="entity-link" :href="entityHref('clients',g.client_id)" @click.prevent="navigateTo('clients',g.client_id)">{{g.client_email}}</a></span>
+                  </div>
+                  <button type="button" class="btn outline small access-revoke" :disabled="busy" :aria-label="'Revoke access to '+g.product_name" @click="revokeAccess(g)">Revoke</button>
+                </div>
+                <div v-if="!grants.length" class="access-empty">No products have been granted to this Client yet. Choose a Brand and grant one on the left.</div>
+                <div v-else-if="!matchingAccessGrants.length" class="access-empty">No granted products match your search.</div>
+              </div>
+            </div>
+          </div>
+          <p class="access-footer-note">Showing up to 100 Clients, Products per Brand, and Grants per Client. Use Refresh to retrieve updates from another session; the API Console supports additional pages.</p>
+        </template>
       </section>
 
       <section v-if="tab==='catalog'" class="panel"><span class="kicker">YOUR ENTITLED PRODUCTS</span><h2>Available catalog <em>{{catalog.length}}</em></h2>
