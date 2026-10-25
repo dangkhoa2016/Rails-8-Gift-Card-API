@@ -3,7 +3,7 @@ module Api
     module Admin
       class ProductAccessesController < BaseController
         def index
-          grants, meta = paginate(client.product_accesses.order(:id))
+          grants, meta = paginate(client.product_accesses.includes(:client, product: :brand).order(:id))
           render json: { data: grants.map { |grant| serialize(grant) }, meta: meta }
         end
 
@@ -34,7 +34,14 @@ module Api
         end
 
         def serialize(grant)
-          grant.as_json(only: %i[id client_id product_id])
+          grant.as_json(only: %i[id client_id product_id]).merge(
+            client_email: grant.client.email,
+            product_name: grant.product.name,
+            brand_name: grant.product.brand.name,
+            brand_id: grant.product.brand_id,
+            product_currency: grant.product.currency,
+            product_face_value: grant.product.face_value
+          )
         end
       end
     end

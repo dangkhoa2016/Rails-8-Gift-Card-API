@@ -24,7 +24,7 @@
   <main>
     <header class="topbar">
       <div><div class="eyebrow">INTERACTIVE REVIEW WORKSPACE</div><h1>{{heading}}</h1></div>
-      <div class="session" v-if="session"><span class="dot"></span>{{session.user.role}} #{{session.user.id}} <button type="button" @click="logout">Sign out</button></div>
+      <div class="session" v-if="session"><span class="dot"></span>{{session.email||session.user.role}} <small>({{session.user.role}})</small> <button type="button" @click="logout">Sign out</button></div>
       <span class="session" v-else>Not signed in</span>
     </header>
     <div v-if="flash.text" :class="['alert',flash.kind]" role="status">{{flash.text}}<button @click="flash.text=''">×</button></div>
@@ -53,60 +53,137 @@
       </section>
 
       <section v-if="tab==='brands'" class="two-col">
-        <div class="panel"><span class="kicker">BRAND MANAGEMENT</span><h2>Create brand</h2><form class="stack" @submit.prevent="createBrand">
-          <label>Name<input v-model.trim="brandForm.name" required maxlength="200" placeholder="Example Brand"></label>
-          <label>State<select v-model="brandForm.state"><option>active</option><option>inactive</option></select></label>
-          <button class="btn primary" :disabled="busy">Create brand</button></form>
+        <div class="panel"><span class="kicker">BRAND MANAGEMENT</span><h2>{{editingBrandId?'Edit brand':'Create brand'}}</h2>
+          <p class="muted">Brand identity and status. Inactive brands cannot issue new cards.</p>
+          <form class="stack" @submit.prevent="saveBrand">
+            <label>Name<input v-model.trim="brandForm.name" required maxlength="200" placeholder="Example Brand"></label>
+            <label>State<select v-model="brandForm.state"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+            <label>Custom fields (JSON, up to 5 keys)<textarea v-model="brandForm.custom_fields" rows="3" class="mono" spellcheck="false"></textarea></label>
+            <div class="form-actions"><button class="btn primary" :disabled="busy">{{editingBrandId?'Save changes':'Create brand'}}</button>
+              <button v-if="editingBrandId" type="button" class="btn outline" @click="resetBrand">Cancel edit</button></div>
+          </form>
         </div>
-        <div class="panel"><span class="kicker">DATABASE RECORDS</span><h2>Brands <em>{{brands.length}}</em></h2><div class="scroll"><table><thead><tr><th>ID</th><th>Name</th><th>State</th><th>Actions</th></tr></thead><tbody>
-          <tr v-for="b in brands" :key="b.id"><td>#{{b.id}}</td><td>{{b.name}}</td><td><span :class="['pill',b.state]">{{b.state}}</span></td><td><button class="text-btn" :disabled="busy" @click="setBrandState(b)">{{b.state==='active'?'Deactivate':'Activate'}}</button> <button class="text-btn" @click="selectBrand(b.id)">Products →</button></td></tr>
-          <tr v-if="!brands.length"><td class="empty" colspan="4">No brands found</td></tr>
-        </tbody></table></div></div>
+        <div class="panel"><span class="kicker">BRAND DIRECTORY</span><h2>Brands <em>{{brands.length}}</em></h2>
+          <div class="scroll"><table><thead><tr><th>Brand</th><th>State</th><th>Actions</th></tr></thead><tbody>
+          <tr v-for="b in brands" :key="b.id"><td><strong>{{b.name}}</strong><small>Brand ID: {{b.id}}</small></td>
+            <td><span :class="['pill',b.state]">{{b.state}}</span></td>
+            <td><div class="table-actions"><button class="text-btn" :disabled="busy" @click="inspect('brands',b.id)">View</button>
+              <button class="text-btn" :disabled="busy" @click="editBrand(b)">Edit</button>
+              <button class="text-btn" :disabled="busy" @click="setBrandState(b)">{{b.state==='active'?'Deactivate':'Activate'}}</button>
+              <button class="text-btn" @click="selectBrand(b.id)">Products →</button></div></td></tr>
+          <tr v-if="!brands.length"><td class="empty" colspan="3">No brands found</td></tr>
+          </tbody></table></div>
+          <div v-if="selectedDetail?.kind==='brands'" class="record-details"><h3>Brand details</h3><dl>
+            <dt>Name</dt><dd>{{selectedDetail.data.name}}</dd><dt>Status</dt><dd>{{selectedDetail.data.state}}</dd>
+            <dt>Custom fields</dt><dd class="mono">{{pretty(selectedDetail.data.custom_fields)}}</dd>
+          </dl></div>
+        </div>
       </section>
 
       <section v-if="tab==='products'" class="two-col">
-        <div class="panel"><span class="kicker">PRODUCT MANAGEMENT</span><h2>Create product</h2><form class="stack" @submit.prevent="createProduct">
-          <label>Brand<select v-model="productForm.brand_id" required><option value="" disabled>Select brand</option><option v-for="b in brands" :value="b.id">{{b.name}} (#{{b.id}})</option></select></label>
-          <label>Name<input v-model.trim="productForm.name" required placeholder="USD 100 Gift Card"></label>
-          <div class="pair"><label>Face value<input v-model="productForm.face_value" type="number" min="0.01" step="0.01" required></label><label>Currency<input v-model.trim="productForm.currency" maxlength="3" minlength="3" required></label></div>
-          <label>State<select v-model="productForm.state"><option>active</option><option>inactive</option></select></label>
-          <button class="btn primary" :disabled="busy">Create product</button></form>
+        <div class="panel"><span class="kicker">PRODUCT MANAGEMENT</span><h2>{{editingProductId?'Edit product':'Create product'}}</h2>
+          <p class="muted">Product deletion is a soft-delete; previously issued cards remain accessible and cancellable.</p>
+          <form class="stack" @submit.prevent="saveProduct">
+            <label>Brand<select v-model="productForm.brand_id" :disabled="editingProductId!==null" required><option value="" disabled>Select brand</option><option v-for="b in brands" :key="b.id" :value="b.id">{{b.name}}</option></select></label>
+            <label>Name<input v-model.trim="productForm.name" required maxlength="200" placeholder="USD 100 Gift Card"></label>
+            <div class="pair"><label>Face value<input v-model="productForm.face_value" type="number" min="0.01" step="0.01" required></label>
+              <label>Currency<input v-model.trim="productForm.currency" maxlength="3" minlength="3" required></label></div>
+            <label>State<select v-model="productForm.state"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
+            <label>Custom fields (JSON, up to 5 keys)<textarea v-model="productForm.custom_fields" class="mono" rows="3" spellcheck="false"></textarea></label>
+            <div class="form-actions"><button class="btn primary" :disabled="busy">{{editingProductId?'Save changes':'Create product'}}</button>
+              <button v-if="editingProductId" class="btn outline" type="button" @click="resetProduct">Cancel edit</button></div>
+          </form>
         </div>
-        <div class="panel"><span class="kicker">BRAND CATALOG</span><h2>Products</h2><label>Selected brand<select v-model="brandId" @change="loadProducts"><option value="" disabled>Select brand</option><option v-for="b in brands" :value="b.id">{{b.name}}</option></select></label>
-          <div class="scroll"><table><thead><tr><th>Name</th><th>Value</th><th>State</th><th>Actions</th></tr></thead><tbody>
-          <tr v-for="p in products" :key="p.id"><td>{{p.name}}<small>#{{p.id}}</small></td><td>{{p.face_value}} {{p.currency}}</td><td><span :class="['pill',p.state]">{{p.deleted_at?'deleted':p.state}}</span></td><td><button class="text-btn" :disabled="busy||!!p.deleted_at" @click="setProductState(p)">{{p.state==='active'?'Disable':'Enable'}}</button> <button class="text-btn dangerous" :disabled="busy||!!p.deleted_at" @click="removeProduct(p)">Delete</button></td></tr>
-          <tr v-if="!products.length"><td class="empty" colspan="4">No products for selected brand</td></tr>
+        <div class="panel"><span class="kicker">BRAND CATALOG</span><h2>Products <em>{{products.length}}</em></h2>
+          <label>Browse products for brand<select v-model="brandId" @change="loadProducts"><option value="" disabled>Select brand</option>
+            <option v-for="b in brands" :key="b.id" :value="b.id">{{b.name}}</option></select></label>
+          <div class="scroll"><table><thead><tr><th>Product</th><th>Brand</th><th>Value</th><th>State</th><th>Actions</th></tr></thead><tbody>
+          <tr v-for="p in products" :key="p.id"><td><strong>{{p.name}}</strong><small>Product ID: {{p.id}}</small></td>
+            <td>{{brandName(p.brand_id)}}</td><td>{{money(p.face_value,p.currency)}}</td>
+            <td><span :class="['pill',p.state]">{{p.deleted_at?'Deleted':p.state}}</span></td>
+            <td><div class="table-actions"><button class="text-btn" @click="inspect('products',p.id)">View</button>
+              <button class="text-btn" :disabled="busy||!!p.deleted_at" @click="editProduct(p)">Edit</button>
+              <button class="text-btn" :disabled="busy||!!p.deleted_at" @click="setProductState(p)">{{p.state==='active'?'Disable':'Enable'}}</button>
+              <button class="text-btn dangerous" :disabled="busy||!!p.deleted_at" @click="removeProduct(p)">Delete</button></div></td></tr>
+          <tr v-if="!products.length"><td class="empty" colspan="5">No products for selected brand</td></tr>
           </tbody></table></div>
+          <div v-if="selectedDetail?.kind==='products'" class="record-details"><h3>Product details</h3><dl>
+            <dt>Name</dt><dd>{{selectedDetail.data.name}}</dd><dt>Brand</dt><dd>{{brandName(selectedDetail.data.brand_id)}}</dd>
+            <dt>Face value</dt><dd>{{money(selectedDetail.data.face_value,selectedDetail.data.currency)}}</dd>
+            <dt>Status</dt><dd>{{selectedDetail.data.deleted_at?'Soft-deleted':selectedDetail.data.state}}</dd>
+            <dt>Custom fields</dt><dd class="mono">{{pretty(selectedDetail.data.custom_fields)}}</dd>
+          </dl></div>
         </div>
       </section>
 
       <section v-if="tab==='clients'" class="two-col">
-        <div class="panel"><span class="kicker">CLIENT MANAGEMENT</span><h2>Create client</h2><form class="stack" @submit.prevent="createClient">
-          <label>Email<input type="email" v-model.trim="clientForm.email" required placeholder="client@example.test"></label>
-          <label>Password<input type="password" autocomplete="new-password" v-model="clientForm.password" minlength="8" required></label>
-          <label>Payout rate (%)<input type="number" v-model="clientForm.payout_rate" min="0" max="100" step="0.0001" required></label>
-          <button class="btn primary" :disabled="busy">Create client</button></form>
+        <div class="panel"><span class="kicker">CLIENT MANAGEMENT</span><h2>{{editingClientId?'Edit client':'Create client'}}</h2>
+          <p class="muted">Disable accounts rather than deleting financial or audit history.</p>
+          <form class="stack" @submit.prevent="saveClient">
+            <label>Email<input type="email" v-model.trim="clientForm.email" required placeholder="client@example.test"></label>
+            <label>{{editingClientId?'New password (leave blank to keep existing)':'Password'}}<input type="password" autocomplete="new-password"
+              v-model="clientForm.password" minlength="8" :required="!editingClientId"></label>
+            <label>Payout rate (%)<input type="number" v-model="clientForm.payout_rate" min="0" max="100" step="0.0001" required></label>
+            <label class="checkline"><input type="checkbox" v-model="clientForm.active"> Account active</label>
+            <div class="form-actions"><button class="btn primary" :disabled="busy">{{editingClientId?'Save changes':'Create client'}}</button>
+              <button v-if="editingClientId" class="btn outline" type="button" @click="resetClient">Cancel edit</button></div>
+          </form>
         </div>
-        <div class="panel"><span class="kicker">CLIENT DIRECTORY</span><h2>Clients <em>{{clients.length}}</em></h2><div class="scroll"><table><thead><tr><th>Email</th><th>Payout</th><th>Active</th><th>Actions</th></tr></thead><tbody>
-          <tr v-for="c in clients" :key="c.id"><td>{{c.email}}<small>#{{c.id}}</small></td><td>{{c.payout_rate}}%</td><td><span :class="['pill',c.active?'active':'inactive']">{{c.active?'yes':'no'}}</span></td><td><button class="text-btn" :disabled="busy" @click="setClientState(c)">{{c.active?'Disable':'Enable'}}</button> <button class="text-btn" @click="selectClient(c.id)">Grants →</button></td></tr>
+        <div class="panel"><span class="kicker">CLIENT DIRECTORY</span><h2>Clients <em>{{clients.length}}</em></h2>
+          <div class="scroll"><table><thead><tr><th>Client</th><th>Payout rate</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+          <tr v-for="c in clients" :key="c.id"><td><strong>{{c.email}}</strong><small>Client ID: {{c.id}}</small></td>
+            <td>{{c.payout_rate}}%</td><td><span :class="['pill',c.active?'active':'inactive']">{{c.active?'Active':'Disabled'}}</span></td>
+            <td><div class="table-actions"><button class="text-btn" @click="inspect('clients',c.id)">View</button>
+              <button class="text-btn" :disabled="busy" @click="editClient(c)">Edit</button>
+              <button class="text-btn" :disabled="busy" @click="setClientState(c)">{{c.active?'Disable':'Enable'}}</button>
+              <button class="text-btn" @click="selectClient(c.id)">Grants →</button></div></td></tr>
           <tr v-if="!clients.length"><td class="empty" colspan="4">No clients</td></tr>
           </tbody></table></div>
+          <div v-if="selectedDetail?.kind==='clients'" class="record-details"><h3>Client details</h3><dl>
+            <dt>Email</dt><dd>{{selectedDetail.data.email}}</dd>
+            <dt>Payout rate</dt><dd>{{selectedDetail.data.payout_rate}}%</dd>
+            <dt>Status</dt><dd>{{selectedDetail.data.active?'Active':'Disabled'}}</dd>
+            <dt>Created</dt><dd>{{selectedDetail.data.created_at}}</dd>
+          </dl></div>
         </div>
       </section>
 
       <section v-if="tab==='grants'" class="two-col">
-        <div class="panel"><span class="kicker">ACCESS CONTROL</span><h2>Grant product access</h2><form class="stack" @submit.prevent="grantAccess">
-          <label>Client<select v-model="clientId" @change="loadGrants" required><option value="" disabled>Select client</option><option v-for="c in clients" :value="c.id">{{c.email}}</option></select></label>
-          <label>Brand<select v-model="brandId" @change="loadProducts" required><option value="" disabled>Select brand</option><option v-for="b in brands" :value="b.id">{{b.name}}</option></select></label>
-          <label>Product<select v-model="grantProductId" required><option value="" disabled>Select product</option><option v-for="p in products.filter(x=>!x.deleted_at)" :value="p.id">{{p.name}} (#{{p.id}})</option></select></label>
-          <button class="btn primary" :disabled="busy">Grant access</button></form>
+        <div class="panel"><span class="kicker">ACCESS CONTROL</span><h2>Grant product access</h2>
+          <p class="muted">Each grant associates a client with an eligible gift card product.</p>
+          <form class="stack" @submit.prevent="grantAccess">
+            <label>Client<select v-model="clientId" @change="loadGrants" required><option value="" disabled>Select client</option>
+              <option v-for="c in clients" :key="c.id" :value="c.id">{{c.email}}</option></select></label>
+            <label>Brand<select v-model="brandId" @change="loadProducts" required><option value="" disabled>Select brand</option>
+              <option v-for="b in brands" :key="b.id" :value="b.id">{{b.name}}</option></select></label>
+            <label>Product<select v-model="grantProductId" required><option value="" disabled>Select product</option>
+              <option v-for="p in products.filter(x=>!x.deleted_at)" :key="p.id" :value="p.id">{{p.name}} — {{money(p.face_value,p.currency)}}</option></select></label>
+            <button class="btn primary" :disabled="busy">Grant access</button>
+          </form>
         </div>
-        <div class="panel"><span class="kicker">CLIENT ENTITLEMENTS</span><h2>Active grants</h2><div class="scroll"><table><thead><tr><th>Grant</th><th>Product</th><th>Action</th></tr></thead><tbody><tr v-for="g in grants" :key="g.id"><td>#{{g.id}}</td><td>#{{g.product_id}}</td><td><button class="text-btn dangerous" :disabled="busy" @click="revokeAccess(g)">Revoke</button></td></tr><tr v-if="!grants.length"><td class="empty" colspan="3">No grants for selected client</td></tr></tbody></table></div></div>
+        <div class="panel"><span class="kicker">CLIENT ENTITLEMENTS</span><h2>Active grants <em>{{grants.length}}</em></h2>
+          <p class="muted">Viewing access for <strong>{{clientName(clientId)}}</strong></p>
+          <div class="scroll"><table><thead><tr><th>Product</th><th>Brand</th><th>Value</th><th>Client</th><th>Action</th></tr></thead><tbody>
+            <tr v-for="g in grants" :key="g.id"><td><strong>{{g.product_name}}</strong><small>Product ID: {{g.product_id}}</small></td>
+              <td>{{g.brand_name}}</td><td>{{money(g.product_face_value,g.product_currency)}}</td><td>{{g.client_email}}</td>
+              <td><button class="text-btn dangerous" :disabled="busy" @click="revokeAccess(g)">Revoke</button></td></tr>
+            <tr v-if="!grants.length"><td class="empty" colspan="5">No grants for selected client</td></tr>
+          </tbody></table></div>
+        </div>
       </section>
 
-      <section v-if="tab==='catalog'" class="panel"><span class="kicker">YOUR ENTITLED PRODUCTS</span><h2>Available catalog</h2><p class="muted">Only active products granted to this Client are shown.</p>
-        <div class="catalog-grid"><button class="catalog-tile" v-for="p in catalog" :key="p.id" @click="pickCatalog(p)"><span class="tile-glyph">◇</span><strong>{{p.name}}</strong><span>{{p.face_value}} {{p.currency}}</span><small>Issue card →</small></button></div>
-        <div v-if="!catalog.length" class="empty">No eligible products. Request an Admin grant.</div>
+      <section v-if="tab==='catalog'" class="panel"><span class="kicker">YOUR ENTITLED PRODUCTS</span><h2>Available catalog <em>{{catalog.length}}</em></h2>
+        <p class="muted">Only active products granted to this Client are shown.</p>
+        <form class="filters" @submit.prevent="loadCatalog">
+          <label>Search product or brand<input v-model="catalogQuery" placeholder="Name contains…"></label>
+          <label>Currency<input v-model="catalogCurrency" placeholder="USD" maxlength="3"></label>
+          <button class="btn primary" :disabled="busy">Search</button>
+          <button class="btn outline" type="button" @click="catalogQuery='';catalogCurrency='';loadCatalog()">Clear</button>
+        </form>
+        <div class="catalog-grid"><button class="catalog-tile" v-for="p in catalog" :key="p.id" @click="pickCatalog(p)">
+          <span class="tile-glyph">◇</span><small class="brand-tag">{{p.brand_name}}</small><strong>{{p.name}}</strong>
+          <span>{{money(p.face_value,p.currency)}}</span><small>Issue card →</small></button></div>
+        <div v-if="!catalog.length" class="empty">No eligible products match these filters, or no Admin grant is available.</div>
       </section>
 
       <section v-if="tab==='issue'" class="two-col">
@@ -119,19 +196,40 @@
         <div class="panel"><span class="kicker">LATEST ISSUANCE RESPONSE</span><h2>Card details</h2><div class="gift-card" v-if="issued"><small>ACTIVATION NUMBER</small><strong>{{issued.activation_number}}</strong><div>{{issued.face_value_snapshot}} {{issued.currency_snapshot}} · {{issued.status}}</div><div class="pin" v-if="issued.pin">PIN: {{issued.pin}}</div></div><div class="empty" v-else>Issue a card to view the response.</div><p class="help">The PIN is deliberately absent from GET card responses and is cleared on sign-out.</p></div>
       </section>
 
-      <section v-if="tab==='cards'" class="panel"><span class="kicker">CARD LIFECYCLE</span><h2>My cards <em>{{cards.length}}</em></h2><div class="filters"><label>Status<select v-model="cardStatus" @change="loadCards"><option value="">All</option><option value="issued">Issued</option><option value="cancelled">Cancelled</option></select></label></div><div class="scroll"><table><thead><tr><th>Card / Activation</th><th>Product</th><th>Face value</th><th>Payout</th><th>Status</th><th>Action</th></tr></thead><tbody>
-        <tr v-for="c in cards" :key="c.id"><td>#{{c.id}}<small class="mono">{{c.activation_number}}</small></td><td>#{{c.product_id}}</td><td>{{c.face_value_snapshot}} {{c.currency_snapshot}}</td><td>{{c.payout_amount_snapshot}} {{c.currency_snapshot}}</td><td><span :class="['pill',c.status==='issued'?'active':'inactive']">{{c.status}}</span></td><td><button class="text-btn dangerous" @click="cancelCard(c)" :disabled="busy||c.status!=='issued'">Cancel</button></td></tr><tr v-if="!cards.length"><td colspan="6" class="empty">No cards found</td></tr>
-        </tbody></table></div><p class="help">Displays up to 100 most recent cards.</p></section>
+      <section v-if="tab==='cards'" class="panel"><span class="kicker">CARD LIFECYCLE</span><h2>My cards <em>{{cards.length}}</em></h2>
+        <div class="filters"><label>Status<select v-model="cardStatus" @change="loadCards"><option value="">All</option>
+          <option value="issued">Issued</option><option value="cancelled">Cancelled</option></select></label></div>
+        <div class="scroll"><table><thead><tr><th>Gift card</th><th>Product / Brand</th><th>Face value</th><th>Payout</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+        <tr v-for="c in cards" :key="c.id"><td><strong class="mono">{{c.activation_number}}</strong><small>Card ID: {{c.id}}</small></td>
+          <td><strong>{{c.product_name}}</strong><small>{{c.brand_name}}</small></td>
+          <td>{{money(c.face_value_snapshot,c.currency_snapshot)}}</td>
+          <td>{{money(c.payout_amount_snapshot,c.currency_snapshot)}}</td>
+          <td><span :class="['pill',c.status==='issued'?'active':'inactive']">{{c.status}}</span></td>
+          <td><div class="table-actions"><button class="text-btn" :disabled="busy" @click="inspect('cards',c.id)">View</button>
+            <button class="text-btn dangerous" @click="cancelCard(c)" :disabled="busy||c.status!=='issued'">Cancel</button></div></td></tr>
+        <tr v-if="!cards.length"><td colspan="6" class="empty">No cards found</td></tr>
+        </tbody></table></div>
+        <div class="record-details" v-if="cardDetail"><h3>Gift card details</h3><dl>
+          <dt>Product</dt><dd>{{cardDetail.product_name}}</dd><dt>Brand</dt><dd>{{cardDetail.brand_name}}</dd>
+          <dt>Activation</dt><dd class="mono">{{cardDetail.activation_number}}</dd>
+          <dt>Face value</dt><dd>{{money(cardDetail.face_value_snapshot,cardDetail.currency_snapshot)}}</dd>
+          <dt>Rate snapshot</dt><dd>{{cardDetail.payout_rate_snapshot}}%</dd>
+          <dt>Payout snapshot</dt><dd>{{money(cardDetail.payout_amount_snapshot,cardDetail.currency_snapshot)}}</dd>
+          <dt>Issued at</dt><dd>{{cardDetail.issued_at}}</dd>
+          <dt>Cancelled at</dt><dd>{{cardDetail.cancelled_at||'Not cancelled'}}</dd>
+        </dl><p class="help">PIN is never returned by the card detail endpoint.</p></div>
+        <p class="help">Displays up to 100 most recent cards; details and associations come from the real Rails API.</p>
+      </section>
 
       <section v-if="tab==='reports'" class="panel"><span class="kicker">EVENT-TIME FINANCIAL REPORT</span><h2>{{session.user.role==='admin'?'Administrative reports':'Personal spending'}}</h2><div class="filters">
         <label>From (UTC)<input type="date" v-model="reportFrom"></label><label>To (exclusive, UTC)<input type="date" v-model="reportTo"></label>
         <label v-if="session.user.role==='admin'">Group<select v-model="reportGroup"><option value="by_brand">By brand</option><option value="by_client">By client</option></select></label>
         <button class="btn primary" @click="loadReport" :disabled="busy">Run report</button></div>
-        <div class="scroll" v-if="reportRows.length"><table><thead><tr><th v-for="key in reportKeys">{{key.replaceAll('_',' ')}}</th></tr></thead><tbody><tr v-for="(r,i) in reportRows" :key="i"><td v-for="key in reportKeys">{{typeof r[key]==='object'?pretty(r[key]):r[key]}}</td></tr></tbody></table></div><div v-else class="empty">No report rows for this range</div>
+        <div class="scroll" v-if="reportRows.length"><table><thead><tr><th v-for="key in reportKeys">{{key.replaceAll('_',' ')}}</th></tr></thead><tbody><tr v-for="(r,i) in reportRows" :key="i"><td v-for="key in reportKeys"><strong v-if="key==='brand_id'||key==='client_id'">{{reportValue(r,key)}}</strong><span v-else>{{reportValue(r,key)}}</span></td></tr></tbody></table></div><div v-else class="empty">No report rows for this range</div>
         <details><summary>Raw report JSON</summary><pre class="response-pre">{{pretty(reportData)}}</pre></details>
       </section>
 
-      <section v-if="tab==='audit'" class="panel"><span class="kicker">AUDIT LEDGER</span><h2>Admin audit logs</h2><div class="filters"><label>Action<input v-model.trim="auditAction" placeholder="card.issued"></label><label>Actor ID<input type="number" min="1" v-model="auditActor" placeholder="All"></label><button class="btn primary" @click="loadAudit" :disabled="busy">Apply</button></div><div class="scroll"><table><thead><tr><th>UTC time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Record</th></tr></thead><tbody><tr v-for="e in audits" :key="e.id"><td>{{e.occurred_at}}</td><td>#{{e.actor_id ?? '—'}}</td><td class="mono">{{e.action}}</td><td>{{e.outcome}}</td><td>{{e.record_type}} #{{e.record_id ?? '—'}}</td></tr><tr v-if="!audits.length"><td class="empty" colspan="5">No matching audit events</td></tr></tbody></table></div><p class="help">Showing up to 50 events. PINs and passwords are not included.</p></section>
+      <section v-if="tab==='audit'" class="panel"><span class="kicker">AUDIT LEDGER</span><h2>Admin audit logs</h2><div class="filters"><label>Action<input v-model.trim="auditAction" placeholder="card.issued"></label><label>Actor (Client)<select v-model="auditActor"><option value="">All users</option><option v-for="c in clients" :key="c.id" :value="c.id">{{c.email}}</option></select></label><button class="btn primary" @click="loadAudit" :disabled="busy">Apply</button></div><div class="scroll"><table><thead><tr><th>UTC time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Record</th></tr></thead><tbody><tr v-for="e in audits" :key="e.id"><td>{{e.occurred_at}}</td><td><strong>{{e.actor_email||'Unknown / system'}}</strong><small v-if="e.actor_id">User ID: {{e.actor_id}}</small></td><td class="mono">{{e.action}}</td><td>{{e.outcome}}</td><td><strong>{{auditRecordLabel(e)}}</strong><small v-if="e.record_id">{{e.record_type}} ID: {{e.record_id}}</small></td></tr><tr v-if="!audits.length"><td class="empty" colspan="5">No matching audit events</td></tr></tbody></table></div><p class="help">Showing up to 50 events. PINs and passwords are not included.</p></section>
 
       <section v-if="tab==='console'" class="two-col console">
         <div class="panel"><span class="kicker">LIVE API REQUEST</span><h2>HTTP console</h2><p class="muted">Only same-origin <code>/api/v1/</code> paths are permitted; authentication uses the in-memory session JWT.</p>
