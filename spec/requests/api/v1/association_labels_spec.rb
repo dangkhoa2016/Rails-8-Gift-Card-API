@@ -13,6 +13,38 @@ RSpec.describe "Human-readable associations for optional reviewer UI", type: :re
 
   before { ProductAccess.create!(client: client, product: product) }
 
+  it "keeps Admin list and show payloads equivalent for cache-backed details" do
+    get "/api/v1/admin/brands", headers: admin_headers
+    brand_row = response.parsed_body.fetch("data").find { |row| row["id"] == brand.id }
+    get "/api/v1/admin/brands/#{brand.id}", headers: admin_headers
+    expect(response.parsed_body.fetch("data")).to eq(brand_row)
+
+    get "/api/v1/admin/brands/#{brand.id}/products", headers: admin_headers
+    product_row = response.parsed_body.fetch("data").find { |row| row["id"] == product.id }
+    get "/api/v1/admin/products/#{product.id}", headers: admin_headers
+    expect(response.parsed_body.fetch("data")).to eq(product_row)
+
+    get "/api/v1/admin/clients", headers: admin_headers
+    client_row = response.parsed_body.fetch("data").find { |row| row["id"] == client.id }
+    get "/api/v1/admin/clients/#{client.id}", headers: admin_headers
+    expect(response.parsed_body.fetch("data")).to eq(client_row)
+  end
+
+  it "keeps client card list and detail payloads equivalent without leaking the PIN" do
+    post "/api/v1/client/cards", headers: client_headers.merge("Idempotency-Key" => "cache-parity"),
+      params: { product_id: product.id, with_pin: true }, as: :json
+    expect(response).to have_http_status(:created)
+    issued = response.parsed_body.fetch("data")
+    pin = issued.fetch("pin")
+
+    get "/api/v1/client/cards", headers: client_headers
+    listed = response.parsed_body.fetch("data").find { |row| row["id"] == issued.fetch("id") }
+    get "/api/v1/client/cards/#{issued.fetch('id')}", headers: client_headers
+    expect(response.parsed_body.fetch("data")).to eq(listed)
+    expect(listed).not_to have_key("pin")
+    expect(response.body).not_to include(pin)
+  end
+
   it "lists brand labels in the authorized client catalog only" do
     get "/api/v1/client/catalog", headers: client_headers
     expect(response).to have_http_status(:ok)

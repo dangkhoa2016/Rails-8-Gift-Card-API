@@ -45,3 +45,36 @@ footer{font-size:11px;color:#99a5b5;margin-top:auto;padding:38px 0 10px;text-ali
 .session small{font-size:10px;color:#92a0b3}
 td{white-space:normal;min-width:80px}td .mono{overflow-wrap:anywhere}th{white-space:nowrap}
 @media(max-width:710px){.record-details dl{grid-template-columns:1fr;gap:3px}.record-details dd{margin-bottom:10px}.form-actions>*{flex:1}}
+
+/* Entity relations are real, focusable links within the authenticated workspace. */
+.entity-link{color:#2563c9;text-decoration:none;text-underline-offset:3px;font-weight:700;cursor:pointer}
+.entity-link:hover{text-decoration:underline;color:#174caa}
+.entity-link:focus-visible{outline:2px solid #3983e9;outline-offset:3px;border-radius:3px}
+.table-actions .entity-link{font-size:12px;padding:6px 2px}
+.record-details .entity-link{overflow-wrap:anywhere}
+.catalog-tile .brand-tag.entity-link{align-self:flex-start}
+.catalog-tile .product-title{font-size:14px;margin:10px 0 8px;color:#213454}
+.catalog-tile .issue-link{font-size:12px;margin-top:auto;color:#3268c7}
+.catalog-tile .brand-tag{font-weight:700}
+.filter-chip{border-radius:99px;background:#e8f1ff;color:#3663a4;font-size:11px;font-weight:700;padding:9px 12px}
+
+/* Loading indicators: visual spinner, accessibility status, and reduced-motion fallback. */
+.loading-notice{display:flex;align-items:center;gap:11px;position:relative;overflow:hidden;border-radius:12px;border:1px solid #d5e3fa;background:#f1f7ff;color:#2b5ca5;font-weight:750;font-size:13px;padding:13px 15px;margin-bottom:17px;min-height:52px}
+.loading-icon{flex:none;animation:wogi-spin .85s linear infinite}
+.loading-track{position:absolute;bottom:0;left:0;height:3px;width:38%;background:#4b86df;border-radius:99px;animation:wogi-progress 1.4s ease-in-out infinite}
+.scroll.is-loading{min-height:100px;opacity:.4;pointer-events:none}
+.btn.processing{position:relative;gap:9px;cursor:progress}
+.btn.processing:before{content:"";display:inline-block;flex:none;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:wogi-spin .8s linear infinite}
+@keyframes wogi-spin{to{transform:rotate(360deg)}}
+@keyframes wogi-progress{0%{transform:translateX(-110%)}100%{transform:translateX(380%)}}
+@media(prefers-reduced-motion:reduce){.loading-icon,.loading-track,.btn.processing:before{animation:none}.loading-track{width:100%;opacity:.5}}
+
+
+/* Readable API validation details and field-level guidance (no HTML injection). */
+.alert{align-items:flex-start;gap:16px}
+.alert-body{flex:1;min-width:0;line-height:1.55}
+.validation-summary{margin:7px 0 0;padding-left:20px;font-weight:500}
+.validation-summary li+li{margin-top:5px}
+.field-error{display:block;font-size:12px;font-weight:650;line-height:1.4;color:#b63845;margin-top:1px}
+input[aria-invalid="true"],select[aria-invalid="true"]{border-color:#d54c5b;background:#fffafa}
+input[aria-invalid="true"]:focus{box-shadow:0 0 0 3px #d54c5b25}

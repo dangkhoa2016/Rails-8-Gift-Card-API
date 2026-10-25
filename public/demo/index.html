@@ -27,7 +27,15 @@
       <div class="session" v-if="session"><span class="dot"></span>{{session.email||session.user.role}} <small>({{session.user.role}})</small> <button type="button" @click="logout">Sign out</button></div>
       <span class="session" v-else>Not signed in</span>
     </header>
-    <div v-if="flash.text" :class="['alert',flash.kind]" role="status">{{flash.text}}<button @click="flash.text=''">×</button></div>
+    <div v-if="flash.text" :class="['alert',flash.kind]" :role="flash.kind==='error'?'alert':'status'">
+      <div class="alert-body">
+        <strong>{{flash.text}}</strong>
+        <ul v-if="validationErrors.length" class="validation-summary">
+          <li v-for="(entry,index) in validationErrors" :key="entry.field+'-'+index">{{entry.message}}</li>
+        </ul>
+      </div>
+      <button type="button" aria-label="Dismiss notification" @click="flash.text='';validationErrors=[]">×</button>
+    </div>
     <template v-if="!session">
       <div class="login-grid">
         <section class="panel login"><span class="kicker">SECURE SIGN-IN</span><h2>Welcome back.</h2>
@@ -35,7 +43,7 @@
           <form @submit.prevent="login" class="stack">
             <label>Email<input type="email" v-model.trim="loginForm.email" placeholder="admin@example.test" autocomplete="username" required></label>
             <label>Password<input type="password" v-model="loginForm.password" autocomplete="current-password" required></label>
-            <button class="btn primary" :disabled="busy">{{busy?'Signing in…':'Sign in'}}</button>
+            <button :class="['btn','primary',{processing:submitting}]" :disabled="busy">{{busy?'Signing in…':'Sign in'}}</button>
           </form>
           <p class="help">Create local demo accounts using <code>DEMO_ADMIN_PASSWORD</code> and <code>DEMO_CLIENT_PASSWORD</code> with <code>bin/rails db:seed</code>.</p>
         </section>
@@ -44,12 +52,20 @@
     </template>
     <template v-else>
       <div class="toolbar" v-if="tab!=='console'"><span>{{hint}}</span><button type="button" class="btn outline small" :disabled="busy" @click="refresh">↻ Refresh</button></div>
+      <div v-if="loadingTable || loadingDetail" class="loading-notice" role="status" aria-live="polite">
+        <svg class="loading-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
+          <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity=".24" stroke-width="3"></circle>
+          <path d="M12 3a9 9 0 0 1 9 9" stroke="currentColor" stroke-width="3" stroke-linecap="round"></path>
+        </svg>
+        <span>{{loadingDetail?'Opening record details…':'Loading records…'}}</span>
+        <span class="loading-track" aria-hidden="true"></span>
+      </div>
 
       <section v-if="tab==='overview'" class="grid-overview">
         <div class="metric"><small>ACCOUNT ROLE</small><strong>{{session.user.role.toUpperCase()}}</strong><span>Role-based API access</span></div>
         <div class="metric"><small>BACKEND</small><strong>Rails 8.1</strong><span>PostgreSQL persistence</span></div>
         <div class="metric"><small>FRONTEND</small><strong>Vue 3</strong><span>CDN · no build</span></div>
-        <div class="panel full"><span class="kicker">GET STARTED</span><h2>Select a workflow</h2><p class="muted">The UI uses live data. Admin should create Brands, Products and Clients, then grant access. Client can issue and cancel cards after signing in.</p><button class="btn primary" @click="go(session.user.role==='admin'?'brands':'catalog')">Open workspace →</button></div>
+        <div class="panel full"><span class="kicker">GET STARTED</span><h2>Select a workflow</h2><p class="muted">The UI uses live data. Admin should create Brands, Products and Clients, then grant access. Client can issue and cancel cards after signing in.</p><button :class="['btn','primary',{processing:submitting}]" @click="go(session.user.role==='admin'?'brands':'catalog')">Open workspace →</button></div>
       </section>
 
       <section v-if="tab==='brands'" class="two-col">
@@ -59,18 +75,18 @@
             <label>Name<input v-model.trim="brandForm.name" required maxlength="200" placeholder="Example Brand"></label>
             <label>State<select v-model="brandForm.state"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
             <label>Custom fields (JSON, up to 5 keys)<textarea v-model="brandForm.custom_fields" rows="3" class="mono" spellcheck="false"></textarea></label>
-            <div class="form-actions"><button class="btn primary" :disabled="busy">{{editingBrandId?'Save changes':'Create brand'}}</button>
+            <div class="form-actions"><button :class="['btn','primary',{processing:submitting}]" :disabled="busy">{{editingBrandId?'Save changes':'Create brand'}}</button>
               <button v-if="editingBrandId" type="button" class="btn outline" @click="resetBrand">Cancel edit</button></div>
           </form>
         </div>
         <div class="panel"><span class="kicker">BRAND DIRECTORY</span><h2>Brands <em>{{brands.length}}</em></h2>
-          <div class="scroll"><table><thead><tr><th>Brand</th><th>State</th><th>Actions</th></tr></thead><tbody>
-          <tr v-for="b in brands" :key="b.id"><td><strong>{{b.name}}</strong><small>Brand ID: {{b.id}}</small></td>
+          <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>Brand</th><th>State</th><th>Actions</th></tr></thead><tbody>
+          <tr v-for="b in brands" :key="b.id"><td><a class="entity-link" :href="entityHref('brands',b.id)" @click.prevent="navigateTo('brands',b.id)">{{b.name}}</a><small>Brand ID: {{b.id}}</small></td>
             <td><span :class="['pill',b.state]">{{b.state}}</span></td>
             <td><div class="table-actions"><button class="text-btn" :disabled="busy" @click="inspect('brands',b.id)">View</button>
               <button class="text-btn" :disabled="busy" @click="editBrand(b)">Edit</button>
               <button class="text-btn" :disabled="busy" @click="setBrandState(b)">{{b.state==='active'?'Deactivate':'Activate'}}</button>
-              <button class="text-btn" @click="selectBrand(b.id)">Products →</button></div></td></tr>
+              <a class="entity-link" :href="entityHref('brands-products',b.id)" @click.prevent="navigateTo('brands-products',b.id)">Products →</a></div></td></tr>
           <tr v-if="!brands.length"><td class="empty" colspan="3">No brands found</td></tr>
           </tbody></table></div>
           <div v-if="selectedDetail?.kind==='brands'" class="record-details"><h3>Brand details</h3><dl>
@@ -90,16 +106,16 @@
               <label>Currency<input v-model.trim="productForm.currency" maxlength="3" minlength="3" required></label></div>
             <label>State<select v-model="productForm.state"><option value="active">Active</option><option value="inactive">Inactive</option></select></label>
             <label>Custom fields (JSON, up to 5 keys)<textarea v-model="productForm.custom_fields" class="mono" rows="3" spellcheck="false"></textarea></label>
-            <div class="form-actions"><button class="btn primary" :disabled="busy">{{editingProductId?'Save changes':'Create product'}}</button>
+            <div class="form-actions"><button :class="['btn','primary',{processing:submitting}]" :disabled="busy">{{editingProductId?'Save changes':'Create product'}}</button>
               <button v-if="editingProductId" class="btn outline" type="button" @click="resetProduct">Cancel edit</button></div>
           </form>
         </div>
         <div class="panel"><span class="kicker">BRAND CATALOG</span><h2>Products <em>{{products.length}}</em></h2>
           <label>Browse products for brand<select v-model="brandId" @change="loadProducts"><option value="" disabled>Select brand</option>
             <option v-for="b in brands" :key="b.id" :value="b.id">{{b.name}}</option></select></label>
-          <div class="scroll"><table><thead><tr><th>Product</th><th>Brand</th><th>Value</th><th>State</th><th>Actions</th></tr></thead><tbody>
-          <tr v-for="p in products" :key="p.id"><td><strong>{{p.name}}</strong><small>Product ID: {{p.id}}</small></td>
-            <td>{{brandName(p.brand_id)}}</td><td>{{money(p.face_value,p.currency)}}</td>
+          <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>Product</th><th>Brand</th><th>Value</th><th>State</th><th>Actions</th></tr></thead><tbody>
+          <tr v-for="p in products" :key="p.id"><td><a class="entity-link" :href="entityHref('products',p.id)" @click.prevent="navigateTo('products',p.id)">{{p.name}}</a><small>Product ID: {{p.id}}</small></td>
+            <td><a class="entity-link" :href="entityHref('brands',p.brand_id)" @click.prevent="navigateTo('brands',p.brand_id)">{{brandName(p.brand_id)}}</a></td><td>{{money(p.face_value,p.currency)}}</td>
             <td><span :class="['pill',p.state]">{{p.deleted_at?'Deleted':p.state}}</span></td>
             <td><div class="table-actions"><button class="text-btn" @click="inspect('products',p.id)">View</button>
               <button class="text-btn" :disabled="busy||!!p.deleted_at" @click="editProduct(p)">Edit</button>
@@ -108,7 +124,7 @@
           <tr v-if="!products.length"><td class="empty" colspan="5">No products for selected brand</td></tr>
           </tbody></table></div>
           <div v-if="selectedDetail?.kind==='products'" class="record-details"><h3>Product details</h3><dl>
-            <dt>Name</dt><dd>{{selectedDetail.data.name}}</dd><dt>Brand</dt><dd>{{brandName(selectedDetail.data.brand_id)}}</dd>
+            <dt>Name</dt><dd>{{selectedDetail.data.name}}</dd><dt>Brand</dt><dd><a class="entity-link" :href="entityHref('brands',selectedDetail.data.brand_id)" @click.prevent="navigateTo('brands',selectedDetail.data.brand_id)">{{brandName(selectedDetail.data.brand_id)}}</a></dd>
             <dt>Face value</dt><dd>{{money(selectedDetail.data.face_value,selectedDetail.data.currency)}}</dd>
             <dt>Status</dt><dd>{{selectedDetail.data.deleted_at?'Soft-deleted':selectedDetail.data.state}}</dd>
             <dt>Custom fields</dt><dd class="mono">{{pretty(selectedDetail.data.custom_fields)}}</dd>
@@ -120,23 +136,33 @@
         <div class="panel"><span class="kicker">CLIENT MANAGEMENT</span><h2>{{editingClientId?'Edit client':'Create client'}}</h2>
           <p class="muted">Disable accounts rather than deleting financial or audit history.</p>
           <form class="stack" @submit.prevent="saveClient">
-            <label>Email<input type="email" v-model.trim="clientForm.email" required placeholder="client@example.test"></label>
+            <label>Email<input type="email" v-model.trim="clientForm.email" required placeholder="client@example.test"
+              :aria-invalid="!!fieldError('email')" :aria-describedby="fieldError('email')?'client-email-error':undefined"
+              @input="clearFieldError('email')">
+              <small v-if="fieldError('email')" id="client-email-error" class="field-error">{{fieldError('email')}}</small>
+            </label>
             <label>{{editingClientId?'New password (leave blank to keep existing)':'Password'}}<input type="password" autocomplete="new-password"
-              v-model="clientForm.password" minlength="8" :required="!editingClientId"></label>
-            <label>Payout rate (%)<input type="number" v-model="clientForm.payout_rate" min="0" max="100" step="0.0001" required></label>
+              v-model="clientForm.password" minlength="8" :required="!editingClientId"
+              :aria-invalid="!!fieldError('password')" @input="clearFieldError('password')">
+              <small v-if="fieldError('password')" class="field-error">{{fieldError('password')}}</small>
+            </label>
+            <label>Payout rate (%)<input type="number" v-model="clientForm.payout_rate" min="0" max="100" step="0.0001" required
+              :aria-invalid="!!fieldError('payout_rate')" @input="clearFieldError('payout_rate')">
+              <small v-if="fieldError('payout_rate')" class="field-error">{{fieldError('payout_rate')}}</small>
+            </label>
             <label class="checkline"><input type="checkbox" v-model="clientForm.active"> Account active</label>
-            <div class="form-actions"><button class="btn primary" :disabled="busy">{{editingClientId?'Save changes':'Create client'}}</button>
+            <div class="form-actions"><button :class="['btn','primary',{processing:submitting}]" :disabled="busy">{{editingClientId?'Save changes':'Create client'}}</button>
               <button v-if="editingClientId" class="btn outline" type="button" @click="resetClient">Cancel edit</button></div>
           </form>
         </div>
         <div class="panel"><span class="kicker">CLIENT DIRECTORY</span><h2>Clients <em>{{clients.length}}</em></h2>
-          <div class="scroll"><table><thead><tr><th>Client</th><th>Payout rate</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-          <tr v-for="c in clients" :key="c.id"><td><strong>{{c.email}}</strong><small>Client ID: {{c.id}}</small></td>
+          <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>Client</th><th>Payout rate</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+          <tr v-for="c in clients" :key="c.id"><td><a class="entity-link" :href="entityHref('clients',c.id)" @click.prevent="navigateTo('clients',c.id)">{{c.email}}</a><small>Client ID: {{c.id}}</small></td>
             <td>{{c.payout_rate}}%</td><td><span :class="['pill',c.active?'active':'inactive']">{{c.active?'Active':'Disabled'}}</span></td>
             <td><div class="table-actions"><button class="text-btn" @click="inspect('clients',c.id)">View</button>
               <button class="text-btn" :disabled="busy" @click="editClient(c)">Edit</button>
               <button class="text-btn" :disabled="busy" @click="setClientState(c)">{{c.active?'Disable':'Enable'}}</button>
-              <button class="text-btn" @click="selectClient(c.id)">Grants →</button></div></td></tr>
+              <a class="entity-link" :href="entityHref('grants',c.id)" @click.prevent="navigateTo('grants',c.id)">Grants →</a></div></td></tr>
           <tr v-if="!clients.length"><td class="empty" colspan="4">No clients</td></tr>
           </tbody></table></div>
           <div v-if="selectedDetail?.kind==='clients'" class="record-details"><h3>Client details</h3><dl>
@@ -158,14 +184,16 @@
               <option v-for="b in brands" :key="b.id" :value="b.id">{{b.name}}</option></select></label>
             <label>Product<select v-model="grantProductId" required><option value="" disabled>Select product</option>
               <option v-for="p in products.filter(x=>!x.deleted_at)" :key="p.id" :value="p.id">{{p.name}} — {{money(p.face_value,p.currency)}}</option></select></label>
-            <button class="btn primary" :disabled="busy">Grant access</button>
+            <button :class="['btn','primary',{processing:submitting}]" :disabled="busy">Grant access</button>
           </form>
         </div>
         <div class="panel"><span class="kicker">CLIENT ENTITLEMENTS</span><h2>Active grants <em>{{grants.length}}</em></h2>
-          <p class="muted">Viewing access for <strong>{{clientName(clientId)}}</strong></p>
-          <div class="scroll"><table><thead><tr><th>Product</th><th>Brand</th><th>Value</th><th>Client</th><th>Action</th></tr></thead><tbody>
-            <tr v-for="g in grants" :key="g.id"><td><strong>{{g.product_name}}</strong><small>Product ID: {{g.product_id}}</small></td>
-              <td>{{g.brand_name}}</td><td>{{money(g.product_face_value,g.product_currency)}}</td><td>{{g.client_email}}</td>
+          <p class="muted">Viewing access for <a v-if="clientId" class="entity-link" :href="entityHref('clients',clientId)" @click.prevent="navigateTo('clients',clientId)">{{clientName(clientId)}}</a></p>
+          <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>Product</th><th>Brand</th><th>Value</th><th>Client</th><th>Action</th></tr></thead><tbody>
+            <tr v-for="g in grants" :key="g.id"><td><a class="entity-link" :href="entityHref('products',g.product_id)" @click.prevent="navigateTo('products',g.product_id)">{{g.product_name}}</a><small>Product ID: {{g.product_id}}</small></td>
+              <td><a class="entity-link" :href="entityHref('brands',g.brand_id)" @click.prevent="navigateTo('brands',g.brand_id)">{{g.brand_name}}</a></td>
+              <td>{{money(g.product_face_value,g.product_currency)}}</td>
+              <td><a class="entity-link" :href="entityHref('clients',g.client_id)" @click.prevent="navigateTo('clients',g.client_id)">{{g.client_email}}</a></td>
               <td><button class="text-btn dangerous" :disabled="busy" @click="revokeAccess(g)">Revoke</button></td></tr>
             <tr v-if="!grants.length"><td class="empty" colspan="5">No grants for selected client</td></tr>
           </tbody></table></div>
@@ -177,12 +205,16 @@
         <form class="filters" @submit.prevent="loadCatalog">
           <label>Search product or brand<input v-model="catalogQuery" placeholder="Name contains…"></label>
           <label>Currency<input v-model="catalogCurrency" placeholder="USD" maxlength="3"></label>
-          <button class="btn primary" :disabled="busy">Search</button>
-          <button class="btn outline" type="button" @click="catalogQuery='';catalogCurrency='';loadCatalog()">Clear</button>
+          <button :class="['btn','primary',{processing:submitting}]" :disabled="busy">Search</button>
+          <button class="btn outline" type="button" :disabled="busy" @click="clearCatalogFilters">Clear</button>
+          <span v-if="catalogBrandId" class="filter-chip">Brand filter: {{catalog.find(p=>p.brand_id===Number(catalogBrandId))?.brand_name||'Selected brand'}}</span>
         </form>
-        <div class="catalog-grid"><button class="catalog-tile" v-for="p in catalog" :key="p.id" @click="pickCatalog(p)">
-          <span class="tile-glyph">◇</span><small class="brand-tag">{{p.brand_name}}</small><strong>{{p.name}}</strong>
-          <span>{{money(p.face_value,p.currency)}}</span><small>Issue card →</small></button></div>
+        <div class="catalog-grid"><div class="catalog-tile" v-for="p in catalog" :key="p.id">
+          <span class="tile-glyph">◇</span>
+          <a class="brand-tag entity-link" :href="entityHref('catalog-brand',p.brand_id)" @click.prevent="navigateTo('catalog-brand',p.brand_id)">{{p.brand_name}}</a>
+          <a class="entity-link product-title" :href="entityHref('issue-product',p.id)" @click.prevent="navigateTo('issue-product',p.id)">{{p.name}}</a>
+          <span>{{money(p.face_value,p.currency)}}</span>
+          <a class="entity-link issue-link" :href="entityHref('issue-product',p.id)" @click.prevent="navigateTo('issue-product',p.id)">Issue card →</a></div></div>
         <div v-if="!catalog.length" class="empty">No eligible products match these filters, or no Admin grant is available.</div>
       </section>
 
@@ -191,7 +223,7 @@
           <label>Product<select v-model="issueForm.product_id" required><option value="" disabled>Select product</option><option v-for="p in catalog" :value="p.id">{{p.name}} – {{p.face_value}} {{p.currency}}</option></select></label>
           <label>Idempotency key<input v-model.trim="issueForm.key" required placeholder="order-unique-reference-001"></label>
           <label class="checkline"><input type="checkbox" v-model="issueForm.with_pin"> Generate PIN</label>
-          <button class="btn primary" :disabled="busy">Issue card</button></form><p class="help">Exact retry: HTTP 200. New issue: HTTP 201. Same key with different payload: HTTP 409.</p>
+          <button :class="['btn','primary',{processing:submitting}]" :disabled="busy">Issue card</button></form><p class="help">Exact retry: HTTP 200. New issue: HTTP 201. Same key with different payload: HTTP 409.</p>
         </div>
         <div class="panel"><span class="kicker">LATEST ISSUANCE RESPONSE</span><h2>Card details</h2><div class="gift-card" v-if="issued"><small>ACTIVATION NUMBER</small><strong>{{issued.activation_number}}</strong><div>{{issued.face_value_snapshot}} {{issued.currency_snapshot}} · {{issued.status}}</div><div class="pin" v-if="issued.pin">PIN: {{issued.pin}}</div></div><div class="empty" v-else>Issue a card to view the response.</div><p class="help">The PIN is deliberately absent from GET card responses and is cleared on sign-out.</p></div>
       </section>
@@ -199,8 +231,8 @@
       <section v-if="tab==='cards'" class="panel"><span class="kicker">CARD LIFECYCLE</span><h2>My cards <em>{{cards.length}}</em></h2>
         <div class="filters"><label>Status<select v-model="cardStatus" @change="loadCards"><option value="">All</option>
           <option value="issued">Issued</option><option value="cancelled">Cancelled</option></select></label></div>
-        <div class="scroll"><table><thead><tr><th>Gift card</th><th>Product / Brand</th><th>Face value</th><th>Payout</th><th>Status</th><th>Actions</th></tr></thead><tbody>
-        <tr v-for="c in cards" :key="c.id"><td><strong class="mono">{{c.activation_number}}</strong><small>Card ID: {{c.id}}</small></td>
+        <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>Gift card</th><th>Product / Brand</th><th>Face value</th><th>Payout</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+        <tr v-for="c in cards" :key="c.id"><td><a class="entity-link mono" :href="entityHref('cards',c.id)" @click.prevent="navigateTo('cards',c.id)">{{c.activation_number}}</a><small>Card ID: {{c.id}}</small></td>
           <td><strong>{{c.product_name}}</strong><small>{{c.brand_name}}</small></td>
           <td>{{money(c.face_value_snapshot,c.currency_snapshot)}}</td>
           <td>{{money(c.payout_amount_snapshot,c.currency_snapshot)}}</td>
@@ -224,19 +256,22 @@
       <section v-if="tab==='reports'" class="panel"><span class="kicker">EVENT-TIME FINANCIAL REPORT</span><h2>{{session.user.role==='admin'?'Administrative reports':'Personal spending'}}</h2><div class="filters">
         <label>From (UTC)<input type="date" v-model="reportFrom"></label><label>To (exclusive, UTC)<input type="date" v-model="reportTo"></label>
         <label v-if="session.user.role==='admin'">Group<select v-model="reportGroup"><option value="by_brand">By brand</option><option value="by_client">By client</option></select></label>
-        <button class="btn primary" @click="loadReport" :disabled="busy">Run report</button></div>
-        <div class="scroll" v-if="reportRows.length"><table><thead><tr><th v-for="key in reportKeys">{{key.replaceAll('_',' ')}}</th></tr></thead><tbody><tr v-for="(r,i) in reportRows" :key="i"><td v-for="key in reportKeys"><strong v-if="key==='brand_id'||key==='client_id'">{{reportValue(r,key)}}</strong><span v-else>{{reportValue(r,key)}}</span></td></tr></tbody></table></div><div v-else class="empty">No report rows for this range</div>
+        <button :class="['btn','primary',{processing:submitting}]" @click="loadReport" :disabled="busy">Run report</button></div>
+        <div :class="['scroll',{'is-loading':loadingTable}]" v-if="reportRows.length"><table><thead><tr><th v-for="key in reportKeys">{{key.replaceAll('_',' ')}}</th></tr></thead><tbody><tr v-for="(r,i) in reportRows" :key="i"><td v-for="key in reportKeys"><a v-if="session.user.role==='admin' && key==='brand_id'" class="entity-link" :href="entityHref('brands',r[key])" @click.prevent="navigateTo('brands',r[key])">{{reportValue(r,key)}}</a>
+          <a v-else-if="session.user.role==='admin' && key==='client_id'" class="entity-link" :href="entityHref('clients',r[key])" @click.prevent="navigateTo('clients',r[key])">{{reportValue(r,key)}}</a><span v-else>{{reportValue(r,key)}}</span></td></tr></tbody></table></div><div v-else class="empty">No report rows for this range</div>
         <details><summary>Raw report JSON</summary><pre class="response-pre">{{pretty(reportData)}}</pre></details>
       </section>
 
-      <section v-if="tab==='audit'" class="panel"><span class="kicker">AUDIT LEDGER</span><h2>Admin audit logs</h2><div class="filters"><label>Action<input v-model.trim="auditAction" placeholder="card.issued"></label><label>Actor (Client)<select v-model="auditActor"><option value="">All users</option><option v-for="c in clients" :key="c.id" :value="c.id">{{c.email}}</option></select></label><button class="btn primary" @click="loadAudit" :disabled="busy">Apply</button></div><div class="scroll"><table><thead><tr><th>UTC time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Record</th></tr></thead><tbody><tr v-for="e in audits" :key="e.id"><td>{{e.occurred_at}}</td><td><strong>{{e.actor_email||'Unknown / system'}}</strong><small v-if="e.actor_id">User ID: {{e.actor_id}}</small></td><td class="mono">{{e.action}}</td><td>{{e.outcome}}</td><td><strong>{{auditRecordLabel(e)}}</strong><small v-if="e.record_id">{{e.record_type}} ID: {{e.record_id}}</small></td></tr><tr v-if="!audits.length"><td class="empty" colspan="5">No matching audit events</td></tr></tbody></table></div><p class="help">Showing up to 50 events. PINs and passwords are not included.</p></section>
+      <section v-if="tab==='audit'" class="panel"><span class="kicker">AUDIT LEDGER</span><h2>Admin audit logs</h2><div class="filters"><label>Action<input v-model.trim="auditAction" placeholder="card.issued"></label><label>Actor (Client)<select v-model="auditActor"><option value="">All users</option><option v-for="c in clients" :key="c.id" :value="c.id">{{c.email}}</option></select></label><button :class="['btn','primary',{processing:submitting}]" @click="loadAudit" :disabled="busy">Apply</button></div><div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>UTC time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Record</th></tr></thead><tbody><tr v-for="e in audits" :key="e.id"><td>{{e.occurred_at}}</td><td><a v-if="canOpenAuditActor(e)" class="entity-link" :href="entityHref('clients',e.actor_id)" @click.prevent="navigateTo('clients',e.actor_id)">{{e.actor_email}}</a>
+            <strong v-else>{{e.actor_email||'Unknown / system'}}</strong><small v-if="e.actor_id">User ID: {{e.actor_id}}</small></td><td class="mono">{{e.action}}</td><td>{{e.outcome}}</td><td><a v-if="auditEntity(e)" class="entity-link" :href="entityHref(auditEntity(e).kind,auditEntity(e).id)" @click.prevent="navigateTo(auditEntity(e).kind,auditEntity(e).id)">{{auditRecordLabel(e)}}</a>
+            <strong v-else>{{auditRecordLabel(e)}}</strong><small v-if="e.record_id">{{e.record_type}} ID: {{e.record_id}}</small></td></tr><tr v-if="!audits.length"><td class="empty" colspan="5">No matching audit events</td></tr></tbody></table></div><p class="help">Showing up to 50 events. PINs and passwords are not included.</p></section>
 
       <section v-if="tab==='console'" class="two-col console">
         <div class="panel"><span class="kicker">LIVE API REQUEST</span><h2>HTTP console</h2><p class="muted">Only same-origin <code>/api/v1/</code> paths are permitted; authentication uses the in-memory session JWT.</p>
           <form class="stack" @submit.prevent="sendConsole"><div class="pair"><label>Method<select v-model="consoleForm.method"><option v-for="m in ['GET','POST','PATCH','DELETE']">{{m}}</option></select></label><label>Endpoint<input v-model.trim="consoleForm.path" placeholder="/api/v1/client/catalog" required></label></div>
             <label>Idempotency-Key (optional)<input v-model.trim="consoleForm.key" placeholder="demo-order-001"></label>
             <label>JSON body<textarea v-model="consoleForm.body" spellcheck="false" rows="12" class="mono" placeholder='{"product_id":1}'></textarea></label>
-            <button class="btn primary" :disabled="busy">Send request →</button>
+            <button :class="['btn','primary',{processing:submitting}]" :disabled="busy">Send request →</button>
           </form>
         </div>
         <div class="panel"><span class="kicker">LIVE API RESPONSE</span><div class="response-heading"><h2>Response</h2><span v-if="response.status" :class="['http',response.status>=400?'error':'ok']">HTTP {{response.status}}</span></div><div class="response-meta">{{response.method}} {{response.path}} <span>{{response.duration}} ms</span></div><pre class="response-pre tall">{{pretty(response.body)}}</pre><p class="help">Token exists only in memory until refresh or sign-out. Avoid sharing screenshots containing PINs.</p></div>

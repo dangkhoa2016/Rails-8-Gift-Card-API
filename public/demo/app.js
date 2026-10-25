@@ -40,12 +40,15 @@
     data() {
       return {
         tab: "overview", session: null, busy: false,
+        loadingTable: false, loadingDetail: false, submitting: false,
         flash: { text: "", kind: "success" },
+        validationErrors: [],
         loginForm: { email: "", password: "" },
         brands: [], products: [], clients: [], grants: [], catalog: [], cards: [], audits: [],
         brandId: "", clientId: "", grantProductId: "", cardStatus: "",
         editingBrandId: null, editingProductId: null, editingClientId: null,
         selectedDetail: null, cardDetail: null, catalogQuery: "", catalogCurrency: "",
+        catalogBrandId: "",
         brandForm: { name: "", state: "active", custom_fields: "{}" },
         productForm: { brand_id: "", name: "", face_value: "100.00", currency: "USD", state: "active", custom_fields: "{}" },
         clientForm: { email: "", password: "", payout_rate: "90", active: true },
@@ -74,6 +77,80 @@
       brandName(id) { return this.brands.find(b => b.id === Number(id))?.name || ("Brand #" + id); },
       clientName(id) { return this.clients.find(c => c.id === Number(id))?.email || ("Client #" + id); },
       money(value, currency) { return value + " " + currency; },
+      entityHref(kind, id) {
+        return "#/" + encodeURIComponent(kind) + "/" + encodeURIComponent(id);
+      },
+      canOpenAuditActor(event) {
+        return event.actor_id && this.clients.some(c => c.id === Number(event.actor_id));
+      },
+      auditEntity(event) {
+        if (!event.record_id) return null;
+        if (event.record_type === "Brand") return { kind: "brands", id: event.record_id };
+        if (event.record_type === "Product") return { kind: "products", id: event.record_id };
+        if (event.record_type === "User" &&
+          this.clients.some(c => c.id === Number(event.record_id)))
+          return { kind: "clients", id: event.record_id };
+        if (event.record_type === "ProductAccess") {
+          const attributes = event.after_data || event.before_data || {};
+          if (attributes.client_id) return { kind: "grants", id: attributes.client_id };
+        }
+        return null; // Admin has no card detail endpoint; do not render a broken link.
+      },
+      async navigateTo(kind, rawId) {
+        if (this.busy || !this.session) return;
+        const id = Number(rawId);
+        if (!Number.isSafeInteger(id) || id <= 0) return;
+        const admin = this.session.user.role === "admin";
+        if (kind === "catalog-brand" && !admin) {
+          this.catalogBrandId = id;
+          this.catalogQuery = "";
+          this.catalogCurrency = "";
+          await this.go("catalog");
+        } else if (kind === "issue-product" && !admin) {
+          this.issueForm.product_id = id;
+          await this.go("issue");
+        } else if (kind === "cards" && !admin) {
+          // A card row already has all the fields in the detail response.
+          const card = this.cards.find(item => item.id === id);
+          if (card) {
+            this.tab = "cards";
+            this.cardDetail = card;
+            this.selectedDetail = null;
+          } else {
+            const result = await this.execute(
+              () => this.request("GET", apiRoot + "client/cards/" + id), null, "detail");
+            if (!result) return;
+            this.tab = "cards";
+            this.cardDetail = result.payload.data;
+            this.cards = [result.payload.data];
+          }
+        } else if (admin && kind === "brands-products") {
+          this.brandId = id;
+          await this.go("products");
+        } else if (admin && kind === "grants") {
+          this.clientId = id;
+          await this.go("grants");
+        } else if (admin && ["brands", "clients", "products"].includes(kind)) {
+          // The directory index and show endpoints serialize identical fields.
+          // Prefer the current directory row; for uncached cross-page targets,
+          // fetch only the target detail rather than refetching two lists.
+          const collections = { brands: this.brands, clients: this.clients, products: this.products };
+          let record = collections[kind].find(item => item.id === id);
+          if (!record) {
+            const result = await this.execute(
+              () => this.request("GET", apiRoot + "admin/" + kind + "/" + id), null, "detail");
+            if (!result) return;
+            record = result.payload.data;
+            // Show the fetched record without presenting the old brand's product list.
+            if (kind === "products") this.products = [record];
+            else collections[kind].push(record);
+          }
+          if (kind === "products") this.brandId = record.brand_id;
+          this.tab = kind;
+          this.selectedDetail = { kind, data: record };
+          this.cardDetail = null;
+        }
+      },
       reportValue(row, key) {
         if (key === "brand_id") return this.brandName(row[key]);
         if (key === "client_id") return this.clientName(row[key]);
@@ -128,17 +205,56 @@
           payout_rate: record.payout_rate, active: record.active };
       },
       async inspect(kind, id) {
+        if (this.busy) return;
         const routes = { brands: "admin/brands/", products: "admin/products/",
           clients: "admin/clients/", cards: "client/cards/" };
         if (!routes[kind]) return;
+        const collections = { brands: this.brands, products: this.products,
+          clients: this.clients, cards: this.cards };
+        const existing = collections[kind].find(record => record.id === Number(id));
+        if (existing) {
+          if (kind === "cards") this.cardDetail = existing;
+          else this.selectedDetail = { kind, data: existing };
+          return;
+        }
+        // A deep-linked or paginated-out record is the only case needing GET show.
         await this.execute(async () => {
           const res = await this.request("GET", apiRoot + routes[kind] + encodeURIComponent(id));
           if (kind === "cards") this.cardDetail = res.payload.data;
           else this.selectedDetail = { kind, data: res.payload.data };
-        });
+        }, null, "detail");
       },
       notify(message, kind = "success") {
         this.flash = { text: message, kind };
+      },
+      validationDetails(error) {
+        const details = error?.body?.error?.details;
+        if (!details || typeof details !== "object" || Array.isArray(details)) return [];
+        const labels = {
+          email: "Email address", password: "Password", payout_rate: "Payout rate",
+          name: "Name", face_value: "Face value", currency: "Currency",
+          state: "Status", custom_fields: "Custom fields", product_id: "Product"
+        };
+        return Object.entries(details).flatMap(([field, errors]) => {
+          const values = Array.isArray(errors) ? errors : [errors];
+          return values.filter(message => typeof message === "string" && message.trim())
+            .map(message => {
+              if (field === "email" && message.trim() === "has already been taken") {
+                return { field, message: "Email address is already in use. Please enter a different email address." };
+              }
+              const label = labels[field] || field.replaceAll("_", " ");
+              const normalized = message.trim().replace(/\.$/, "");
+              return { field, message: label + " " + normalized + "." };
+            });
+        });
+      },
+      fieldError(field) {
+        return this.validationErrors.find(item => item.field === field)?.message || "";
+      },
+      clearFieldError(field) {
+        this.validationErrors = this.validationErrors.filter(item => item.field !== field);
+        if (!this.validationErrors.length && this.flash.kind === "error" &&
+          this.flash.text === "Please correct the following fields:") this.flash.text = "";
       },
       errorMessage(error) {
         return error?.body?.error?.message || error?.message || "Unexpected request failure";
@@ -177,10 +293,14 @@
         }
         return { status: res.status, payload, duration };
       },
-      async execute(fn, success) {
-        if (this.busy) return;
+      async execute(fn, success, mode = "submit") {
+        if (this.busy) return null;
         this.busy = true;
+        this.loadingTable = mode === "table";
+        this.loadingDetail = mode === "detail";
+        this.submitting = mode === "submit";
         this.flash.text = "";
+        this.validationErrors = [];
         try {
           const result = await fn();
           if (success) this.notify(typeof success === "function" ? success(result) : success);
@@ -190,15 +310,25 @@
             this.clearSession();
             this.notify("Session expired or account disabled. Sign in again.", "error");
           } else {
-            this.notify(this.errorMessage(error), "error");
+            this.validationErrors = this.validationDetails(error);
+            this.notify(this.validationErrors.length
+              ? "Please correct the following fields:"
+              : this.errorMessage(error), "error");
           }
           return null;
         } finally {
           this.busy = false;
+          this.loadingTable = false;
+          this.loadingDetail = false;
+          this.submitting = false;
         }
       },
       clearSession() {
+        this.validationErrors = [];
         this.session = null;
+        this.loadingTable = false;
+        this.loadingDetail = false;
+        this.submitting = false;
         this.issued = null;
         this.selectedDetail = null;
         this.cardDetail = null;
@@ -231,6 +361,7 @@
         if (!this.session) return;
         // Logout records an audit event; JWT revocation is not implemented server-side.
         this.busy = true;
+        this.submitting = true;
         try { await this.request("POST", apiRoot + "auth/logout"); }
         catch { /* Discard local token even when the server is unavailable. */ }
         finally {
@@ -240,7 +371,8 @@
         }
       },
       async go(section) {
-        if (!this.menu.some(item => item.id === section)) return;
+        if (this.busy || !this.menu.some(item => item.id === section)) return;
+        this.validationErrors = [];
         this.tab = section;
         this.selectedDetail = null;
         this.cardDetail = null;
@@ -262,7 +394,17 @@
             if (this.tab === "cards") await this.fetchCards();
             if (this.tab === "reports") await this.fetchReport();
           }
-        });
+          // An explicit Refresh is authoritative: update/clear any visible cached detail.
+          const lists = { brands: this.brands, products: this.products,
+            clients: this.clients, cards: this.cards };
+          if (this.selectedDetail?.kind === this.tab && lists[this.tab]) {
+            const record = lists[this.tab].find(item => item.id === this.selectedDetail.data.id);
+            this.selectedDetail = record ? { kind: this.tab, data: record } : null;
+          }
+          if (this.tab === "cards" && this.cardDetail) {
+            this.cardDetail = this.cards.find(item => item.id === this.cardDetail.id) || null;
+          }
+        }, null, "table");
       },
       async fetchBrands() {
         const res = await this.request("GET", apiRoot + "admin/brands?per_page=100");
@@ -295,6 +437,7 @@
         const params = new URLSearchParams();
         if (this.catalogQuery.trim()) params.set("q", this.catalogQuery.trim());
         if (this.catalogCurrency.trim()) params.set("currency", this.catalogCurrency.trim().toUpperCase());
+        if (this.catalogBrandId) params.set("brand_id", String(this.catalogBrandId));
         const res = await this.request("GET", apiRoot + "client/catalog" + (params.size ? "?" + params : ""));
         this.catalog = res.payload.data || [];
         if (this.catalog.length && !this.catalog.some(p => p.id === Number(this.issueForm.product_id))) {
@@ -328,15 +471,21 @@
         if (this.editingProductId !== null && Number(this.productForm.brand_id) !== Number(this.brandId))
           this.resetProduct();
         this.selectedDetail = null;
-        await this.execute(() => this.fetchProducts());
+        await this.execute(() => this.fetchProducts(), null, "table");
       },
-      async loadGrants() { await this.execute(() => this.fetchGrants()); },
-      async loadCards() { await this.execute(() => this.fetchCards()); },
-      async loadCatalog() { await this.execute(() => this.fetchCatalog()); },
-      async loadReport() { await this.execute(() => this.fetchReport(), "Report loaded."); },
-      async loadAudit() { await this.execute(() => this.fetchAudit(), "Audit filters applied."); },
-      selectBrand(id) { this.brandId = id; this.go("products"); },
-      selectClient(id) { this.clientId = id; this.go("grants"); },
+      async loadGrants() { await this.execute(() => this.fetchGrants(), null, "table"); },
+      async loadCards() { await this.execute(() => this.fetchCards(), null, "table"); },
+      async loadCatalog() { await this.execute(() => this.fetchCatalog(), null, "table"); },
+      async loadReport() { await this.execute(() => this.fetchReport(), "Report loaded.", "table"); },
+      async loadAudit() { await this.execute(() => this.fetchAudit(), "Audit filters applied.", "table"); },
+      clearCatalogFilters() {
+        this.catalogQuery = "";
+        this.catalogCurrency = "";
+        this.catalogBrandId = "";
+        return this.loadCatalog();
+      },
+      selectBrand(id) { this.navigateTo("brands-products", id); },
+      selectClient(id) { this.navigateTo("grants", id); },
       pickCatalog(item) { this.issueForm.product_id = item.id; this.go("issue"); },
       async saveBrand() {
         await this.execute(async () => {
