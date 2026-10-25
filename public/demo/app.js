@@ -13,7 +13,7 @@
     brands: ["Brands", "Create and manage the brand catalog"],
     products: ["Products", "Configure face value, currency, and availability"],
     clients: ["Clients", "Manage accounts and payout rates"],
-    grants: ["Product access", "Grant or revoke Client product entitlements"],
+    grants: ["Product access", "Manage a client’s gift card product permissions"],
     catalog: ["Catalog", "Products your account is authorized to issue"],
     issue: ["Issue gift card", "Create a card safely with an idempotency key"],
     cards: ["My cards", "Inspect and cancel issued cards"],
@@ -45,7 +45,8 @@
         validationErrors: [],
         loginForm: { email: "", password: "" },
         brands: [], products: [], clients: [], grants: [], catalog: [], cards: [], audits: [],
-        brandId: "", clientId: "", grantProductId: "", cardStatus: "",
+        brandId: "", clientId: "", cardStatus: "",
+        accessClientQuery: "", accessPickerOpen: false, accessProductQuery: "", accessGrantQuery: "",
         editingBrandId: null, editingProductId: null, editingClientId: null,
         selectedDetail: null, cardDetail: null, catalogQuery: "", catalogCurrency: "",
         catalogBrandId: "",
@@ -70,7 +71,24 @@
       heading() { return sections[this.tab][0]; },
       hint() { return sections[this.tab][1]; },
       reportRows() { return Array.isArray(this.reportData?.data) ? this.reportData.data : []; },
-      reportKeys() { return [...new Set(this.reportRows.flatMap(row => Object.keys(row)))]; }
+      reportKeys() { return [...new Set(this.reportRows.flatMap(row => Object.keys(row)))]; },
+      accessClient() { return this.clients.find(c => c.id === Number(this.clientId)) || null; },
+      matchingAccessClients() {
+        const q = this.accessClientQuery.trim().toLowerCase();
+        return this.clients.filter(c => c.email.toLowerCase().includes(q))
+          .sort((a, b) => a.email.localeCompare(b.email));
+      },
+      availableAccessProducts() {
+        const granted = new Set(this.grants.map(g => Number(g.product_id)));
+        const q = this.accessProductQuery.trim().toLowerCase();
+        return this.products.filter(p => !p.deleted_at && !granted.has(p.id) &&
+          [p.name, p.currency, p.face_value].some(value => String(value).toLowerCase().includes(q)));
+      },
+      matchingAccessGrants() {
+        const q = this.accessGrantQuery.trim().toLowerCase();
+        return this.grants.filter(g => [g.product_name, g.brand_name, g.product_currency]
+          .some(value => String(value || "").toLowerCase().includes(q)));
+      }
     },
     methods: {
       pretty(data) { return data == null ? "{}" : JSON.stringify(data, null, 2); },
@@ -129,7 +147,9 @@
           await this.go("products");
         } else if (admin && kind === "grants") {
           this.clientId = id;
-          await this.go("grants");
+          this.accessClientQuery = "";
+          this.accessPickerOpen = false;
+          await this.go("grants", true);
         } else if (admin && ["brands", "clients", "products"].includes(kind)) {
           // The directory index and show endpoints serialize identical fields.
           // Prefer the current directory row; for uncached cross-page targets,
@@ -334,6 +354,8 @@
         this.cardDetail = null;
         this.editingBrandId = this.editingProductId = this.editingClientId = null;
         this.brands = []; this.products = []; this.clients = []; this.grants = [];
+        this.clientId = ""; this.accessClientQuery = ""; this.accessPickerOpen = false;
+        this.accessProductQuery = ""; this.accessGrantQuery = "";
         this.catalog = []; this.cards = []; this.audits = [];
         this.loginForm.email = "";
         this.loginForm.password = "";
@@ -370,8 +392,15 @@
           this.notify("Signed out. Your in-memory token has been discarded.");
         }
       },
-      async go(section) {
+      async go(section, preserveGrantClient = false) {
         if (this.busy || !this.menu.some(item => item.id === section)) return;
+        // Navigation from a Client or Audit link retains the targeted Client;
+        // a direct menu visit asks for an explicit Client selection.
+        if (section === "grants" && !preserveGrantClient && this.tab !== section) {
+          this.clientId = "";
+          this.accessClientQuery = "";
+        }
+        if (section === "grants") this.accessPickerOpen = false;
         this.validationErrors = [];
         this.tab = section;
         this.selectedDetail = null;
@@ -415,17 +444,15 @@
       },
       async fetchProducts() {
         this.products = [];
-        this.grantProductId = "";
         if (!this.brandId) return;
         const res = await this.request("GET", apiRoot + "admin/brands/" + encodeURIComponent(this.brandId) + "/products?per_page=100");
         this.products = res.payload.data || [];
-        if (this.products.length) this.grantProductId = this.products[0].id;
       },
       async fetchClients() {
         const res = await this.request("GET", apiRoot + "admin/clients?per_page=100");
         this.clients = res.payload.data || [];
         if (!this.clients.some(c => c.id === Number(this.clientId)))
-          this.clientId = this.clients[0]?.id || "";
+          this.clientId = this.tab === "grants" ? "" : (this.clients[0]?.id || "");
       },
       async fetchGrants() {
         this.grants = [];
@@ -473,7 +500,24 @@
         this.selectedDetail = null;
         await this.execute(() => this.fetchProducts(), null, "table");
       },
-      async loadGrants() { await this.execute(() => this.fetchGrants(), null, "table"); },
+      openAccessPicker() {
+        this.accessClientQuery = "";
+        this.accessPickerOpen = true;
+        this.$nextTick(() => this.$refs.accessClientSearch?.focus());
+      },
+      async chooseAccessClient(id) {
+        if (this.busy || !this.clients.some(c => c.id === Number(id))) return;
+        const changed = Number(this.clientId) !== Number(id);
+        this.clientId = id;
+        this.accessClientQuery = "";
+        this.accessPickerOpen = false;
+        if (changed) await this.loadGrants();
+      },
+      async loadGrants() {
+        this.accessGrantQuery = "";
+        this.accessProductQuery = "";
+        await this.execute(() => this.fetchGrants(), null, "table");
+      },
       async loadCards() { await this.execute(() => this.fetchCards(), null, "table"); },
       async loadCatalog() { await this.execute(() => this.fetchCatalog(), null, "table"); },
       async loadReport() { await this.execute(() => this.fetchReport(), "Report loaded.", "table"); },
@@ -558,20 +602,25 @@
           await this.fetchClients();
         }, "Client status updated.");
       },
-      async grantAccess() {
-        if (!this.clientId || !this.grantProductId) return this.notify("Select client and product.", "error");
+      async grantAccess(product) {
+        if (!this.clientId || !product || product.deleted_at ||
+          this.grants.some(g => Number(g.product_id) === product.id)) return;
         await this.execute(async () => {
-          await this.request("POST", apiRoot + "admin/clients/" + this.clientId + "/product_accesses",
-            { product_id: this.grantProductId });
-          await this.fetchGrants();
-        }, "Product access granted.");
+          const result = await this.request("POST", apiRoot + "admin/clients/" +
+            encodeURIComponent(this.clientId) + "/product_accesses", { product_id: product.id });
+          // POST returns the authoritative grant with human-readable associations.
+          this.grants = [...this.grants, result.payload.data];
+        }, "Access granted to " + product.name + ".");
       },
       async revokeAccess(g) {
-        if (!window.confirm("Revoke " + g.product_name + " for " + g.client_email + "?")) return;
+        if (!this.clientId || !this.grants.some(item => item.id === g.id)) return;
+        if (!window.confirm("Remove " + g.product_name + " from " + g.client_email +
+          "? This will block new card issuance, but existing cards stay intact.")) return;
         await this.execute(async () => {
-          await this.request("DELETE", apiRoot + "admin/clients/" + this.clientId + "/product_accesses/" + g.product_id);
-          await this.fetchGrants();
-        }, "Product access revoked.");
+          await this.request("DELETE", apiRoot + "admin/clients/" +
+            encodeURIComponent(this.clientId) + "/product_accesses/" + encodeURIComponent(g.product_id));
+          this.grants = this.grants.filter(item => item.id !== g.id);
+        }, "Access revoked for " + g.product_name + ".");
       },
       async issueCard() {
         if (!this.issueForm.key || !this.issueForm.product_id) return this.notify("Product and idempotency key required.", "error");
