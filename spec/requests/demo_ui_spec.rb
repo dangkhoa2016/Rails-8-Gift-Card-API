@@ -30,6 +30,16 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'class="loading-notice"', 'class="loading-icon"'
       )
       expect(response.body).to include(
+        'class="access-workspace"', 'id="access-client-search"',
+        'id="access-client-results"', 'v-for="c in matchingAccessClients.slice(0,8)"',
+        '@click="chooseAccessClient(c.id)"', 'v-if="!clientId"',
+        'v-model.trim="accessProductQuery"', 'v-model.trim="accessGrantQuery"',
+        'v-for="p in availableAccessProducts"', 'v-for="g in matchingAccessGrants"',
+        '@click="grantAccess(p)"', '@click="revokeAccess(g)"',
+        "navigateTo('clients',accessClient.id)"
+      )
+      expect(response.body).not_to include('@submit.prevent="grantAccess"', 'id="access-client-select"')
+      expect(response.body).to include(
         "validationErrors.length", "entry.message", "client-email-error",
         "fieldError('email')", "clearFieldError('email')"
       )
@@ -52,11 +62,22 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         "validationDetails(error)", "this.validationErrors = this.validationDetails(error)",
         "Email address is already in use. Please enter a different email address."
       )
+      expect(response.body).to include(
+        "matchingAccessClients()", "availableAccessProducts()", "matchingAccessGrants()",
+        "openAccessPicker()", "async chooseAccessClient(id)",
+        "this.accessPickerOpen = false",
+        "async grantAccess(product)", "async revokeAccess(g)",
+        "this.grants = [...this.grants, result.payload.data]",
+        "this.grants = this.grants.filter(item => item.id !== g.id)"
+      )
+      expect(response.body).not_to include("grantProductId")
       get "/demo/style.css"
       expect(response).to have_http_status(:ok)
       expect(response.body).to include(".sidebar")
       expect(response.body).to include(".entity-link", ".loading-notice", ".btn.processing")
       expect(response.body).to include(".validation-summary", ".field-error")
+      expect(response.body).to include(".access-workspace", ".access-columns", ".access-item")
+      expect(response.body).to include(".access-client-results", ".access-client-option")
     end
   end
 
