@@ -16,19 +16,19 @@ Open http://localhost:3000/demo (or /demo/index.html). Sign in as admin@example.
 
 ## Admin workflow
 
-1. Open Brands, create or activate a brand.
-2. Open Products, choose the brand and create a product with face value and currency.
-3. Open Clients, create a client, specify a payout percentage, or disable/reactivate an existing client.
-4. Open Product access, choose the client and product, grant or revoke access.
-5. Open Reports and Audit logs to examine transaction history.
+1. In **Brands**, create a brand, use **View** to retrieve its details, **Edit** to change its name/state/custom fields, or deactivate/reactivate it. There is intentionally no Brand hard-delete endpoint.
+2. In **Products**, choose a brand; create, view, edit name/value/currency/custom fields/state, or soft-delete an individual product. Existing cards remain historically intact. A product's parent Brand is not editable.
+3. In **Clients**, create an account, view details, edit email/payout rate/status, optionally replace its password, and disable/reactivate the account. There is intentionally no Client hard-delete endpoint.
+4. In **Product access**, choose a Client, Brand and Product, then grant or revoke access. The grants table shows the Client email, Product name, Brand name and monetary value, with IDs retained only as secondary references.
+5. In **Reports**, grouping IDs are rendered as Brand names or Client emails; raw JSON remains accessible. **Audit logs** show actor emails and meaningful affected-record labels.
 
 ## Client workflow
 
-1. Sign in as Client and open Catalog. Only active granted products are shown.
+1. Sign in as Client and open Catalog. Only active granted products are shown, with Brand names. Search Product/Brand names and filter by currency.
 2. Choose Issue card. Supply a unique Idempotency-Key, select a product, optionally enable PIN, and issue it.
 3. Submit the identical request with the same key. Observe HTTP 200 and the same card ID. New issuance is HTTP 201.
 4. Change payload but reuse the same key. Observe HTTP 409.
-5. Open My cards and cancel an issued card. Verify the cancellation in personal spending.
+5. Open My cards to view the Product and Brand names, inspect card details using **View**, then cancel an issued card. Verify the cancellation in personal spending.
 6. Return to Admin, refresh Reports and Audit logs, and verify corresponding events.
 
 The API console supports GET, POST, PATCH and DELETE for same-origin /api/v1/ endpoints only. It sends JSON objects, accepts an optional Idempotency-Key header, and displays HTTP status, duration and raw JSON. See API_EXAMPLES.md for example requests.
@@ -45,7 +45,9 @@ The API console supports GET, POST, PATCH and DELETE for same-origin /api/v1/ en
 - API Console validates same-origin /api/v1/ paths; it is not an open proxy to external origins.
 - PIN is visible only when issuance or replay returns it. Sign-out clears this UI state. Do not share screenshots containing PINs.
 - Admin authorization remains enforced by the Rails backend, not by frontend menus.
-- Directory tables show at most 100 records per view, audit up to 50; the backend supports pagination.
+- Directory tables show at most 100 records per view, audit up to 50; the backend supports pagination. Names/emails are used for human-readable associations while numeric IDs remain visible for debugging. Very large directories may require API Console pagination.
+- Additional labels in JSON responses are read-only convenience fields; CRUD, authorization and PIN security remain controlled by the original Rails API.
+- Brand and Client removal means **deactivation**, not hard delete; Product removal is a soft-delete, and Gift Cards can only be issued or cancelled.
 - This review UI is not a production identity client. CSP hardening, rate limits, production token revocation and extensive accessibility testing are separate concerns.
 
 ## Validation

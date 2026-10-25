@@ -40,4 +40,4 @@ This document distinguishes clarified business rules from implementation choices
 
 ## Deliberate exclusions
 
-There is no external card provider, frontend admin application, JWT denylist, FX conversion service, or hosted demo requirement. These choices keep the take-home focused on correctness, authorization, auditability and reproducibility. For production, add rate limiting, operational monitoring, secret rotation and environment-specific infrastructure.
+There is no external card provider, production frontend admin application, JWT denylist, FX conversion service, or hosted demo requirement. An optional static Vue 3 CDN reviewer interface is available at `/demo` without a build pipeline. These choices keep the take-home focused on correctness, authorization, auditability and reproducibility. For production, add rate limiting, operational monitoring, secret rotation and environment-specific infrastructure.

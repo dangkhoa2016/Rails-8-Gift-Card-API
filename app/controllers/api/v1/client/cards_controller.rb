@@ -3,7 +3,7 @@ module Api
     module Client
       class CardsController < BaseController
         def index
-          scope = current_user.cards.order(id: :desc)
+          scope = current_user.cards.includes(product: :brand).order(id: :desc)
           scope = scope.where(status: params[:status]) if %w[issued cancelled].include?(params[:status])
           page = [ params.fetch(:page, 1).to_i, 1 ].max
           per_page = params.fetch(:per_page, 25).to_i.clamp(1, 100)
@@ -14,7 +14,7 @@ module Api
         end
 
         def show
-          card = current_user.cards.find_by(id: params[:id])
+          card = current_user.cards.includes(product: :brand).find_by(id: params[:id])
           return not_found unless card
           render json: { data: serialize(card) }
         end
@@ -51,7 +51,10 @@ module Api
         def serialize(card)
           card.as_json(only: %i[id client_id product_id status activation_number
             face_value_snapshot currency_snapshot payout_rate_snapshot
-            payout_amount_snapshot issued_at cancelled_at])
+            payout_amount_snapshot issued_at cancelled_at]).merge(
+              product_name: card.product.name,
+              brand_name: card.product.brand.name
+            )
         end
       end
     end
