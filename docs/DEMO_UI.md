@@ -20,11 +20,12 @@ Open http://localhost:3000/demo (or /demo/index.html). Sign in as admin@example.
 2. In **Products**, choose a brand; create, view, edit name/value/currency/custom fields/state, or soft-delete an individual product. Existing cards remain historically intact. A product's parent Brand is not editable.
 3. In **Clients**, create an account, view details, edit email/payout rate/status, optionally replace its password, and disable/reactivate the account. There is intentionally no Client hard-delete endpoint.
 4. In **Product access**, choose a Client, Brand and Product, then grant or revoke access. The grants table shows the Client email, Product name, Brand name and monetary value, with IDs retained only as secondary references.
-5. In **Reports**, grouping IDs are rendered as Brand names or Client emails; raw JSON remains accessible. **Audit logs** show actor emails and meaningful affected-record labels.
+5. In **Reports**, grouping IDs are rendered as Brand names or Client emails; click those names to open the related Admin details, or inspect raw JSON. **Audit logs** show actor emails and affected-record links where an Admin view exists; events involving cards remain read-only because there is no Admin card-detail API.
+6. Click a Brand or Client name to see record details; click a Product's Brand name to open its parent. The grants table links its Product, Brand and Client directly to the corresponding Admin workspaces.
 
 ## Client workflow
 
-1. Sign in as Client and open Catalog. Only active granted products are shown, with Brand names. Search Product/Brand names and filter by currency.
+1. Sign in as Client and open Catalog. Only active granted products are shown, with Brand names. Search Product/Brand names and filter by currency. Click the Brand label to narrow the catalog to that Brand, or the Product name to jump to Issue card with it selected. Use **Clear** to remove all filters.
 2. Choose Issue card. Supply a unique Idempotency-Key, select a product, optionally enable PIN, and issue it.
 3. Submit the identical request with the same key. Observe HTTP 200 and the same card ID. New issuance is HTTP 201.
 4. Change payload but reuse the same key. Observe HTTP 409.
@@ -47,6 +48,10 @@ The API console supports GET, POST, PATCH and DELETE for same-origin /api/v1/ en
 - Admin authorization remains enforced by the Rails backend, not by frontend menus.
 - Directory tables show at most 100 records per view, audit up to 50; the backend supports pagination. Names/emails are used for human-readable associations while numeric IDs remain visible for debugging. Very large directories may require API Console pagination.
 - Additional labels in JSON responses are read-only convenience fields; CRUD, authorization and PIN security remain controlled by the original Rails API.
+- **Validation errors:** when the API returns `error.details`, the UI lists each field-level error in an accessible error banner. For Clients, Email/Password/Payout rate errors also appear beside the relevant input, with invalid styling; a duplicate email displays a clear "Email address is already in use" explanation. Field feedback clears on input change, and the generic API message remains a fallback when no structured details are supplied. This is frontend presentation only; backend validation and JSON contracts are unchanged.
+- Association names are clickable, keyboard-focusable in-session links. Their destinations are role-scoped; a Client is never offered links to protected Admin resources. The JWT remains in memory, so reloading/opening a new tab requires signing in again.
+- **Request optimization:** the Admin Brand/Product/Client list serializers contain the same display fields as their detail endpoints. Opening a record already in the current in-memory list performs **zero additional API requests**, including cross-page links when cached. Uncached deep links perform **one detail GET**, not list reloads and multiple detail GETs. The same reuse applies to Client card details; this is a browser-memory cache only. Use **Refresh** to retrieve current server state after external changes; Refresh also replaces or clears a previously selected cached detail.
+- The UI displays an SVG loading indicator and progress stripe for list/detail requests, plus an animated CSS spinner for form submissions. While a request is in flight, its controls are disabled, and the indicator is removed on success or error. Reduced-motion preferences disable animation.
 - Brand and Client removal means **deactivation**, not hard delete; Product removal is a soft-delete, and Gift Cards can only be issued or cancelled.
 - This review UI is not a production identity client. CSP hardening, rate limits, production token revocation and extensive accessibility testing are separate concerns.
 
