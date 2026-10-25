@@ -42,6 +42,14 @@ Replace IDs with the values returned by preceding calls.
 curl -sS http://localhost:3000/api/v1/client/catalog \
   -H "Authorization: Bearer $CLIENT_TOKEN"
 
+# Optional filters can be combined: q matches product or brand name
+# case-insensitively; brand_id selects one brand; currency is a 3-letter code.
+curl -sS -G http://localhost:3000/api/v1/client/catalog \
+  -H "Authorization: Bearer $CLIENT_TOKEN" \
+  --data-urlencode 'q=gift' \
+  --data-urlencode 'brand_id=BRAND_ID' \
+  --data-urlencode 'currency=USD'
+
 curl -sS -X POST http://localhost:3000/api/v1/client/cards \
   -H "Authorization: Bearer $CLIENT_TOKEN" \
   -H 'Idempotency-Key: order-example-001' \
