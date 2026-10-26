@@ -382,7 +382,19 @@
             </select>
           </label>
         </div>
-        <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>Gift card</th><th>Product / Brand</th><th>Face value</th><th>Payout</th><th>Status</th><th>PIN</th><th>Actions</th></tr></thead><tbody>
+        <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th scope="col" :aria-sort="cardSortAria('activation_number')"><button type="button" class="card-sort-button"
+          :disabled="busy" :aria-label="cardSortLabel('activation_number','Gift card')"
+          @click="changeCardSort('activation_number')">Gift card <span class="card-sort-icon" aria-hidden="true">{{cardSortIcon('activation_number')}}</span></button></th><th scope="col" :aria-sort="cardSortAria('product')"><button type="button" class="card-sort-button"
+          :disabled="busy" :aria-label="cardSortLabel('product','Product / Brand')"
+          @click="changeCardSort('product')">Product / Brand <span class="card-sort-icon" aria-hidden="true">{{cardSortIcon('product')}}</span></button></th><th scope="col" :aria-sort="cardSortAria('face_value')"><button type="button" class="card-sort-button"
+          :disabled="busy" :aria-label="cardSortLabel('face_value','Face value')"
+          @click="changeCardSort('face_value')">Face value <span class="card-sort-icon" aria-hidden="true">{{cardSortIcon('face_value')}}</span></button></th><th scope="col" :aria-sort="cardSortAria('payout')"><button type="button" class="card-sort-button"
+          :disabled="busy" :aria-label="cardSortLabel('payout','Payout')"
+          @click="changeCardSort('payout')">Payout <span class="card-sort-icon" aria-hidden="true">{{cardSortIcon('payout')}}</span></button></th><th scope="col" :aria-sort="cardSortAria('status')"><button type="button" class="card-sort-button"
+          :disabled="busy" :aria-label="cardSortLabel('status','Status')"
+          @click="changeCardSort('status')">Status <span class="card-sort-icon" aria-hidden="true">{{cardSortIcon('status')}}</span></button></th><th scope="col" :aria-sort="cardSortAria('has_pin')"><button type="button" class="card-sort-button"
+          :disabled="busy" :aria-label="cardSortLabel('has_pin','PIN')"
+          @click="changeCardSort('has_pin')">PIN <span class="card-sort-icon" aria-hidden="true">{{cardSortIcon('has_pin')}}</span></button></th><th scope="col">Actions</th></tr></thead><tbody>
         <tr v-for="c in cards" :key="c.id"><td><a class="entity-link mono" :href="entityHref('cards',c.id)" @click.prevent="inspect('cards',c.id)">{{c.activation_number}}</a><small>Card ID: {{c.id}}</small></td>
           <td><strong>{{c.product_name}}</strong><small>{{c.brand_name}}</small></td>
           <td>{{money(c.face_value_snapshot,c.currency_snapshot)}}</td>
@@ -395,6 +407,8 @@
         </tbody></table></div>
         <nav class="card-pagination" aria-label="My cards pagination" v-if="cardTotal>0">
           <button type="button" class="btn outline small" :disabled="busy||cardPage===1"
+            @click="changeCardPage(1)">« First</button>
+          <button type="button" class="btn outline small" :disabled="busy||cardPage===1"
             @click="changeCardPage(cardPage-1)">← Previous</button>
           <div class="card-pages">
             <button v-for="p in cardVisiblePages" :key="p" type="button"
@@ -405,6 +419,8 @@
           <span class="card-page-count">Page {{cardPage}} of {{cardPageCount}}</span>
           <button type="button" class="btn outline small" :disabled="busy||cardPage===cardPageCount"
             @click="changeCardPage(cardPage+1)">Next →</button>
+          <button type="button" class="btn outline small" :disabled="busy||cardPage===cardPageCount"
+            @click="changeCardPage(cardPageCount)">Last »</button>
         </nav>
 
         <p class="help">Search, Status and PIN filters run on the server before pagination. Selecting a Gift card or View uses the loaded row without reloading the list; an Issue link can show a Card outside the current page.</p>

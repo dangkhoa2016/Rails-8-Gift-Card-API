@@ -46,7 +46,7 @@
         loginForm: { email: "", password: "" },
         brands: [], products: [], clients: [], grants: [], catalog: [], issueCatalog: [], cards: [], audits: [],
         brandId: "", clientId: "", cardStatus: "", cardPinFilter: "", cardQuery: "",
-        cardPage: 1, cardPerPage: 25, cardTotal: 0,
+        cardPage: 1, cardPerPage: 25, cardTotal: 0, cardSortBy: "", cardSortDir: "asc",
         accessClientQuery: "", accessPickerOpen: false, accessProductQuery: "", accessGrantQuery: "",
         editingBrandId: null, editingProductId: null, editingClientId: null,
         selectedDetail: null, cardDetail: null, cardModalOpen: false, cardModalTrigger: null,
@@ -110,6 +110,18 @@
       }
     },
     methods: {
+      cardSortAria(column) {
+        return this.cardSortBy === column
+          ? (this.cardSortDir === "asc" ? "ascending" : "descending") : "none";
+      },
+      cardSortIcon(column) {
+        return this.cardSortBy === column ? (this.cardSortDir === "asc" ? "↑" : "↓") : "↕";
+      },
+      cardSortLabel(column, label) {
+        const direction = this.cardSortBy === column && this.cardSortDir === "asc"
+          ? "descending" : "ascending";
+        return "Sort by " + label + " " + direction;
+      },
       pretty(data) { return data == null ? "{}" : JSON.stringify(data, null, 2); },
       brandName(id) { return this.brands.find(b => b.id === Number(id))?.name || ("Brand #" + id); },
       clientName(id) { return this.clients.find(c => c.id === Number(id))?.email || ("Client #" + id); },
@@ -547,6 +559,7 @@
         this.catalog = []; this.issueCatalog = []; this.cards = []; this.audits = [];
         this.cardStatus = ""; this.cardPinFilter = ""; this.cardQuery = "";
         this.cardPage = 1; this.cardPerPage = 25; this.cardTotal = 0;
+        this.cardSortBy = ""; this.cardSortDir = "asc";
         this.loginForm.email = "";
         this.loginForm.password = "";
         this.consoleForm.body = "";
@@ -608,6 +621,8 @@
           this.cardPinFilter = "";
           this.cardPage = 1;
           this.cardTotal = 0;
+          this.cardSortBy = "";
+          this.cardSortDir = "asc";
           this.cards = [];
         }
         // Navigation from a Client or Audit link retains the targeted Client;
@@ -701,6 +716,10 @@
         if (this.cardQuery.trim()) q.set("q", this.cardQuery.trim());
         if (this.cardStatus) q.set("status", this.cardStatus);
         if (this.cardPinFilter) q.set("has_pin", this.cardPinFilter === "with" ? "true" : "false");
+        if (this.cardSortBy) {
+          q.set("sort_by", this.cardSortBy);
+          q.set("sort_dir", this.cardSortDir);
+        }
         const res = await this.request("GET", apiRoot + "client/cards?" + q);
         this.cards = res.payload.data || [];
         this.cardTotal = Number(res.payload.meta?.total) || 0;
@@ -782,6 +801,30 @@
         this.cardPage = 1; // Search, Status, and PIN filters always begin on page one.
         await this.execute(() => this.fetchCards(), null, "table");
       },
+      async changeCardSort(column) {
+        if (this.busy || !["activation_number", "product", "face_value", "payout",
+          "status", "has_pin"].includes(column)) return;
+        const previous = { column: this.cardSortBy, direction: this.cardSortDir,
+          page: this.cardPage };
+        this.cardSortDir = this.cardSortBy === column && this.cardSortDir === "asc" ? "desc" : "asc";
+        this.cardSortBy = column;
+        this.cardPage = 1;
+        const result = await this.execute(() => this.fetchCards(), null, "table");
+        if (!result) {
+          this.cardSortBy = previous.column;
+          this.cardSortDir = previous.direction;
+          this.cardPage = previous.page;
+          return;
+        }
+        await this.scrollToCardsList();
+      },
+      async scrollToCardsList() {
+        await this.$nextTick();
+        this.$refs.cardsListTop?.scrollIntoView({
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+          block: "start"
+        });
+      },
       async changeCardPage(nextPage) {
         if (this.busy || !Number.isSafeInteger(nextPage) ||
             nextPage < 1 || nextPage > this.cardPageCount || nextPage === this.cardPage) return;
@@ -793,11 +836,7 @@
           return;
         }
         // Page controls are below the table; scroll to the updated list header.
-        await this.$nextTick();
-        this.$refs.cardsListTop?.scrollIntoView({
-          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
-          block: "start"
-        });
+        await this.scrollToCardsList();
       },
       async changeCardPerPage() {
         if (this.busy) return;
