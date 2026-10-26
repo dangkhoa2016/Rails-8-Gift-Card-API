@@ -59,7 +59,10 @@
         issueProductQuery: "", issued: null, issuedHttpStatus: null,
         issuedPinVisible: false, issuedPinTimer: null,
         revealedCardPin: "", revealedCardPinTimer: null, pinRevealError: "",
-        reportFrom: "", reportTo: "", reportGroup: "by_brand", reportData: null,
+        reportFrom: "", reportTo: "", reportGroup: "by_brand", reportClientGroup: "currency",
+        reportData: null,
+        reportPreset: "all", reportCurrencyFilter: "all",
+        reportAppliedFrom: "", reportAppliedTo: "",
         auditAction: "", auditActor: "", auditOutcome: "", auditFrom: "", auditTo: "",
         consoleForm: { method: "GET", path: "/api/v1/client/catalog", body: "", key: "" },
         response: { method: "", path: "", body: { message: "Send a request to inspect the response." }, status: null, duration: "—" }
@@ -90,7 +93,40 @@
         return Array.from({ length: Math.min(5, this.cardPageCount) }, (_, i) => first + i);
       },
       reportRows() { return Array.isArray(this.reportData?.data) ? this.reportData.data : []; },
-      reportKeys() { return [...new Set(this.reportRows.flatMap(row => Object.keys(row)))]; },
+      reportCurrencies() {
+        return [...new Set(this.reportRows.map(row => row.currency))].sort();
+      },
+      reportVisibleRows() {
+        return this.reportCurrencyFilter === "all" ? this.reportRows
+          : this.reportRows.filter(row => row.currency === this.reportCurrencyFilter);
+      },
+      reportIssuedCount() {
+        return this.reportVisibleRows.reduce((total, row) => total + Number(row.issued_count || 0), 0);
+      },
+      reportCancelledCount() {
+        return this.reportVisibleRows.reduce((total, row) => total + Number(row.cancelled_count || 0), 0);
+      },
+      reportCurrencySummaries() {
+        // Money remains separated by currency; no implicit FX conversion.
+        // Whole cents as BigInt retain the exact API decimal snapshots.
+        const totals = new Map();
+        for (const row of this.reportVisibleRows) {
+          if (!totals.has(row.currency)) totals.set(row.currency, {
+            currency: row.currency, issued: 0n, cancelled: 0n, net: 0n, netPayout: 0n
+          });
+          const entry = totals.get(row.currency);
+          entry.issued += this.reportCents(row.issued_face_value);
+          entry.cancelled += this.reportCents(row.cancelled_face_value);
+          entry.net += this.reportCents(row.net_spending);
+          entry.netPayout += this.reportCents(row.net_payout_activity);
+        }
+        return [...totals.values()].sort((a, b) => a.currency.localeCompare(b.currency));
+      },
+      reportRangeLabel() {
+        if (!this.reportAppliedFrom && !this.reportAppliedTo) return "All recorded activity · UTC";
+        return (this.reportAppliedFrom || "Beginning") + " → " +
+          (this.reportAppliedTo || "Present") + " (end excluded, UTC)";
+      },
       accessClient() { return this.clients.find(c => c.id === Number(this.clientId)) || null; },
       matchingAccessClients() {
         const q = this.accessClientQuery.trim().toLowerCase();
@@ -203,6 +239,49 @@
         if (key === "brand_id") return this.brandName(row[key]);
         if (key === "client_id") return this.clientName(row[key]);
         return row[key] ?? "—";
+      },
+      reportGroupLabel(row) {
+        if (this.session?.user.role === "client")
+          return row.brand_name || ("Brand #" + row.brand_id);
+        if (this.reportGroup === "by_brand")
+          return row.brand_name || this.brandName(row.brand_id);
+        return row.client_email || this.clientName(row.client_id);
+      },
+      reportInteger(value) { return Number(value || 0).toLocaleString("en-US"); },
+      reportCents(value) {
+        const match = String(value ?? "0").match(/^(-?)(\d+)(?:\.(\d{1,}))?$/);
+        if (!match) return 0n;
+        const cents = BigInt(match[2]) * 100n +
+          BigInt((match[3] || "").padEnd(2, "0").slice(0, 2));
+        return match[1] ? -cents : cents;
+      },
+      reportFormattedCents(cents, currency) {
+        const sign = cents < 0n ? "-" : "";
+        const positive = cents < 0n ? -cents : cents;
+        return sign + (positive / 100n).toLocaleString("en-US") +
+          "." + String(positive % 100n).padStart(2, "0") + " " + currency;
+      },
+      reportMoney(value, currency) {
+        return this.reportFormattedCents(this.reportCents(value), currency);
+      },
+      reportUtcDate(date) { return date.toISOString().slice(0, 10); },
+      async chooseReportPreset(preset) {
+        if (this.busy || !["all", "month", "last30"].includes(preset)) return;
+        const now = new Date();
+        const year = now.getUTCFullYear(), month = now.getUTCMonth();
+        const midnight = Date.UTC(year, month, now.getUTCDate());
+        if (preset === "all") {
+          this.reportFrom = "";
+          this.reportTo = "";
+        } else if (preset === "month") {
+          this.reportFrom = this.reportUtcDate(new Date(Date.UTC(year, month, 1)));
+          this.reportTo = this.reportUtcDate(new Date(Date.UTC(year, month + 1, 1)));
+        } else {
+          this.reportFrom = this.reportUtcDate(new Date(midnight - 29 * 86400000));
+          this.reportTo = this.reportUtcDate(new Date(midnight + 86400000));
+        }
+        this.reportPreset = preset;
+        await this.loadReport();
       },
       auditRecordLabel(event) {
         if (event.record_label) return event.record_label;
@@ -739,10 +818,16 @@
         const q = new URLSearchParams();
         if (this.reportFrom) q.set("from", this.reportFrom);
         if (this.reportTo) q.set("to", this.reportTo);
-        const route = this.session.user.role === "admin"
-          ? "admin/reports/" + this.reportGroup : "client/reports/spending";
+        const isAdmin = this.session.user.role === "admin";
+        const route = isAdmin ? "admin/reports/" + this.reportGroup : "client/reports/spending";
+        if (!isAdmin) q.set("group_by", this.reportClientGroup);
         const res = await this.request("GET", apiRoot + route + (q.size ? "?" + q : ""));
         this.reportData = res.payload;
+        this.reportAppliedFrom = this.reportFrom;
+        this.reportAppliedTo = this.reportTo;
+        if (this.reportCurrencyFilter !== "all" &&
+            !this.reportRows.some(row => row.currency === this.reportCurrencyFilter))
+          this.reportCurrencyFilter = "all";
       },
       auditUtcInstant(value) {
         // datetime-local has no timezone: interpret its wall-clock fields as UTC,

@@ -45,6 +45,7 @@ RSpec.describe "SQL activity reporting and filtered audit", type: :request do
     usd = rows.find { |row| row.fetch("currency") == "USD" }
     eur = rows.find { |row| row.fetch("currency") == "EUR" }
     expect(usd.fetch("brand_id")).to eq(brand_a.id)
+    expect(usd.fetch("brand_name")).to eq(brand_a.name)
     expect(usd.fetch("issued_count")).to eq(2)
     expect(usd.fetch("cancelled_count")).to eq(1)
     expect(numeric(usd.fetch("net_spending"))).to eq(BigDecimal("50"))
@@ -60,7 +61,40 @@ RSpec.describe "SQL activity reporting and filtered audit", type: :request do
     rows = response.parsed_body.fetch("data")
     expect(rows.size).to eq(1)
     expect(rows.first.fetch("client_id")).to eq(client_a.id)
+    expect(rows.first.fetch("client_email")).to eq(client_a.email)
     expect(numeric(rows.first.fetch("net_payout_activity"))).to eq(BigDecimal("45"))
+  end
+
+  it "lets Client group only their own historical cards by Brand without leaking other Clients" do
+    get "/api/v1/client/reports/spending", headers: client_headers,
+      params: { group_by: "brand", from: "2026-10-01", to: "2026-11-01" }
+    expect(response).to have_http_status(:ok)
+    rows = response.parsed_body.fetch("data")
+    expect(rows.size).to eq(1)
+    expect(rows.first).to include("brand_id" => brand_a.id, "brand_name" => brand_a.name,
+      "currency" => "USD", "issued_count" => 2, "cancelled_count" => 1)
+    expect(BigDecimal(rows.first.fetch("net_spending").to_s)).to eq(BigDecimal("50"))
+    expect(response.body).not_to include(brand_b.name, client_b.email)
+    expect(response.parsed_body.dig("meta", "monetary_basis")).to eq("currency_snapshot")
+
+    get "/api/v1/client/reports/spending", headers: client_headers,
+      params: { group_by: "currency" }
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("data").first.keys).not_to include("brand_id", "brand_name")
+    get "/api/v1/client/reports/spending", headers: client_headers
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("data").first.keys).not_to include("brand_id", "brand_name")
+  end
+
+  it "rejects unsupported Client reporting groups and array inputs" do
+    [ "client", "unknown", "by_client", "brand;DROP TABLE cards" ].each do |value|
+      get "/api/v1/client/reports/spending", headers: client_headers,
+        params: { group_by: value }
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body.dig("error", "code")).to eq("invalid_filter")
+    end
+    get "/api/v1/client/reports/spending?group_by[]=brand", headers: client_headers
+    expect(response).to have_http_status(:unprocessable_content)
   end
 
   it "assigns issuance and cancellation to separate half-open UTC periods" do

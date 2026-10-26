@@ -86,6 +86,10 @@ curl -sS "http://localhost:3000/api/v1/admin/reports/by_client?from=2026-10-01&t
 curl -sS "http://localhost:3000/api/v1/client/reports/spending?from=2026-10-01&to=2026-11-01" \
   -H "Authorization: Bearer $CLIENT_TOKEN"
 
+# Own cards only: group personal activity by Brand and currency.
+curl -sS "http://localhost:3000/api/v1/client/reports/spending?group_by=brand&from=2026-10-01&to=2026-11-01" \
+  -H "Authorization: Bearer $CLIENT_TOKEN"
+
 curl -sS "http://localhost:3000/api/v1/admin/audit_logs?action=card.issued&record_type=Card&page=1&per_page=25" \
   -H "Authorization: Bearer $ADMIN_TOKEN"
 
@@ -107,7 +111,7 @@ curl -sS -G http://localhost:3000/api/v1/admin/audit_logs \
   --data-urlencode 'to=2026-10-20T10:15:31Z'
 ```
 
-These date ranges use UTC and include `from` but exclude `to`. JSON money values are decimal strings. Each report is grouped by currency.
+These date ranges use UTC and include `from` but exclude `to`. JSON money values are decimal strings. Each report remains separated by currency. Admin can group by Brand or Client; Client can group their own activity by Brand with group_by=brand.
 
 ### Client: Reveal an owned Card PIN with password confirmation
 
