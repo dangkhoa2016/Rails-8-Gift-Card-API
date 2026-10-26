@@ -74,7 +74,7 @@
       </section>
 
       <section v-if="tab==='brands'" class="two-col">
-        <div class="panel"><span class="kicker">BRAND MANAGEMENT</span><h2>{{editingBrandId?'Edit brand':'Create brand'}}</h2>
+        <div class="panel edit-form-panel" ref="brandsEditForm"><span class="kicker">BRAND MANAGEMENT</span><h2>{{editingBrandId?'Edit brand':'Create brand'}}</h2>
           <p class="muted">Brand identity and status. Inactive brands cannot issue new cards.</p>
           <form class="stack" @submit.prevent="saveBrand">
             <label>Name<input v-model.trim="brandForm.name" required maxlength="200" placeholder="Example Brand"></label>
@@ -120,7 +120,7 @@
       </section>
 
       <section v-if="tab==='products'" class="two-col">
-        <div class="panel"><span class="kicker">PRODUCT MANAGEMENT</span><h2>{{editingProductId?'Edit product':'Create product'}}</h2>
+        <div class="panel edit-form-panel" ref="productsEditForm"><span class="kicker">PRODUCT MANAGEMENT</span><h2>{{editingProductId?'Edit product':'Create product'}}</h2>
           <p class="muted">Product deletion is a soft-delete; previously issued cards remain accessible and cancellable.</p>
           <form class="stack" @submit.prevent="saveProduct">
             <label>Brand<select v-model="productForm.brand_id" :disabled="editingProductId!==null" required><option value="" disabled>Select brand</option><option v-for="b in brands" :key="b.id" :value="b.id">{{b.name}}</option></select></label>
@@ -187,7 +187,7 @@
       </section>
 
       <section v-if="tab==='clients'" class="two-col">
-        <div class="panel"><span class="kicker">CLIENT MANAGEMENT</span><h2>{{editingClientId?'Edit client':'Create client'}}</h2>
+        <div class="panel edit-form-panel" ref="clientsEditForm"><span class="kicker">CLIENT MANAGEMENT</span><h2>{{editingClientId?'Edit client':'Create client'}}</h2>
           <p class="muted">Disable accounts rather than deleting financial or audit history.</p>
           <form class="stack" @submit.prevent="saveClient">
             <label>Email<input type="email" v-model.trim="clientForm.email" required placeholder="client@example.test"
