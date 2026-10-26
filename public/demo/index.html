@@ -619,6 +619,13 @@
     </template>
     <footer>WOGI Gift Card API · Optional demonstration UI · Vue 3 global CDN + Rails API</footer>
   </main>
+  <button type="button" class="back-to-top" aria-label="Scroll to top"
+          title="Back to top"
+          v-show="showBackToTop && !cardModalOpen && !reportDrilldownOpen && !errorModalOpen"
+          @click="scrollToTop">
+    <span class="back-to-top-arrow" aria-hidden="true">↑</span>
+    <span class="back-to-top-label">Top</span>
+  </button>
   <div v-if="cardModalOpen && cardDetail && tab==='cards'" class="card-modal-overlay"
        @click.self="closeCardDetails()" @keydown.esc.stop.prevent="closeCardDetails()" @keydown.tab="trapCardModalFocus">
     <section ref="cardDetailDialog" class="card-detail-modal" role="dialog" aria-modal="true"
