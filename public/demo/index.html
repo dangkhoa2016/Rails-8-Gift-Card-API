@@ -84,7 +84,16 @@
               <button v-if="editingBrandId" type="button" class="btn outline" @click="resetBrand">Cancel edit</button></div>
           </form>
         </div>
-        <div class="panel"><span class="kicker">BRAND DIRECTORY</span><h2>Brands <em>{{brands.length}}</em></h2>
+        <div class="panel"><span class="kicker">BRAND DIRECTORY</span><h2>Brands <em>{{brandTotal}}</em></h2>
+          <div class="card-pagination-summary directory-pagination-summary" ref="brandsListTop">
+            <p role="status">Showing {{brandFirst}}–{{brandLast}} of {{brandTotal}} brands</p>
+            <label for="brands-per-page">Rows per page
+              <select id="brands-per-page" v-model.number="brandPerPage" @change="changeDirectoryPerPage('brands')" :disabled="busy">
+                <option :value="10">10</option><option :value="25">25</option>
+                <option :value="50">50</option><option :value="100">100</option>
+              </select>
+            </label>
+          </div>
           <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>Brand</th><th>State</th><th>Actions</th></tr></thead><tbody>
           <tr v-for="b in brands" :key="b.id"><td><a class="entity-link" :href="entityHref('brands',b.id)" @click.prevent="navigateTo('brands',b.id)">{{b.name}}</a><small>Brand ID: {{b.id}}</small></td>
             <td><span :class="['pill',b.state]">{{b.state}}</span></td>
@@ -94,10 +103,19 @@
               <a class="entity-link" :href="entityHref('brands-products',b.id)" @click.prevent="navigateTo('brands-products',b.id)">Products →</a></div></td></tr>
           <tr v-if="!brands.length"><td class="empty" colspan="3">No brands found</td></tr>
           </tbody></table></div>
-          <div v-if="selectedDetail?.kind==='brands'" class="record-details"><h3>Brand details</h3><dl>
-            <dt>Name</dt><dd>{{selectedDetail.data.name}}</dd><dt>Status</dt><dd>{{selectedDetail.data.state}}</dd>
-            <dt>Custom fields</dt><dd class="mono">{{pretty(selectedDetail.data.custom_fields)}}</dd>
-          </dl></div>
+<nav v-if="brandTotal>0" class="card-pagination directory-pagination" aria-label="Brands pagination">
+            <button type="button" class="btn outline small" :disabled="busy||brandPage===1" @click="changeDirectoryPage('brands',1)">« First</button>
+            <button type="button" class="btn outline small" :disabled="busy||brandPage===1" @click="changeDirectoryPage('brands',brandPage-1)">← Previous</button>
+            <div class="card-pages">
+              <button v-for="p in brandVisiblePages" :key="p" type="button" :aria-label="'Brands page '+p"
+                :aria-current="p===brandPage?'page':undefined"
+                :class="['card-page-button',{current:p===brandPage}]" :disabled="busy||p===brandPage"
+                @click="changeDirectoryPage('brands',p)">{{p}}</button>
+            </div>
+            <span class="card-page-count">Page {{brandPage}} of {{brandPageCount}}</span>
+            <button type="button" class="btn outline small" :disabled="busy||brandPage===brandPageCount" @click="changeDirectoryPage('brands',brandPage+1)">Next →</button>
+            <button type="button" class="btn outline small" :disabled="busy||brandPage===brandPageCount" @click="changeDirectoryPage('brands',brandPageCount)">Last »</button>
+          </nav>
         </div>
       </section>
 
@@ -164,12 +182,7 @@
             <button type="button" class="btn outline small" :disabled="busy||productPage===productPageCount"
               @click="changeProductPage(productPageCount)">Last »</button>
           </nav>
-          <div v-if="selectedDetail?.kind==='products'" class="record-details"><h3>Product details</h3><dl>
-            <dt>Name</dt><dd>{{selectedDetail.data.name}}</dd><dt>Brand</dt><dd><a class="entity-link" :href="entityHref('brands',selectedDetail.data.brand_id)" @click.prevent="navigateTo('brands',selectedDetail.data.brand_id)">{{brandName(selectedDetail.data.brand_id)}}</a></dd>
-            <dt>Face value</dt><dd>{{money(selectedDetail.data.face_value,selectedDetail.data.currency)}}</dd>
-            <dt>Status</dt><dd>{{selectedDetail.data.deleted_at?'Soft-deleted':selectedDetail.data.state}}</dd>
-            <dt>Custom fields</dt><dd class="mono">{{pretty(selectedDetail.data.custom_fields)}}</dd>
-          </dl></div>
+
         </div>
       </section>
 
@@ -196,7 +209,16 @@
               <button v-if="editingClientId" class="btn outline" type="button" @click="resetClient">Cancel edit</button></div>
           </form>
         </div>
-        <div class="panel"><span class="kicker">CLIENT DIRECTORY</span><h2>Clients <em>{{clients.length}}</em></h2>
+        <div class="panel"><span class="kicker">CLIENT DIRECTORY</span><h2>Clients <em>{{clientTotal}}</em></h2>
+          <div class="card-pagination-summary directory-pagination-summary" ref="clientsListTop">
+            <p role="status">Showing {{clientFirst}}–{{clientLast}} of {{clientTotal}} clients</p>
+            <label for="clients-per-page">Rows per page
+              <select id="clients-per-page" v-model.number="clientPerPage" @change="changeDirectoryPerPage('clients')" :disabled="busy">
+                <option :value="10">10</option><option :value="25">25</option>
+                <option :value="50">50</option><option :value="100">100</option>
+              </select>
+            </label>
+          </div>
           <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>Client</th><th>Payout rate</th><th>Status</th><th>Actions</th></tr></thead><tbody>
           <tr v-for="c in clients" :key="c.id"><td><a class="entity-link" :href="entityHref('clients',c.id)" @click.prevent="navigateTo('clients',c.id)">{{c.email}}</a><small>Client ID: {{c.id}}</small></td>
             <td>{{c.payout_rate}}%</td><td><span :class="['pill',c.active?'active':'inactive']">{{c.active?'Active':'Disabled'}}</span></td>
@@ -206,12 +228,19 @@
               <a class="entity-link" :href="entityHref('grants',c.id)" @click.prevent="navigateTo('grants',c.id)">Grants →</a></div></td></tr>
           <tr v-if="!clients.length"><td class="empty" colspan="4">No clients</td></tr>
           </tbody></table></div>
-          <div v-if="selectedDetail?.kind==='clients'" class="record-details"><h3>Client details</h3><dl>
-            <dt>Email</dt><dd>{{selectedDetail.data.email}}</dd>
-            <dt>Payout rate</dt><dd>{{selectedDetail.data.payout_rate}}%</dd>
-            <dt>Status</dt><dd>{{selectedDetail.data.active?'Active':'Disabled'}}</dd>
-            <dt>Created</dt><dd>{{selectedDetail.data.created_at}}</dd>
-          </dl></div>
+<nav v-if="clientTotal>0" class="card-pagination directory-pagination" aria-label="Clients pagination">
+            <button type="button" class="btn outline small" :disabled="busy||clientPage===1" @click="changeDirectoryPage('clients',1)">« First</button>
+            <button type="button" class="btn outline small" :disabled="busy||clientPage===1" @click="changeDirectoryPage('clients',clientPage-1)">← Previous</button>
+            <div class="card-pages">
+              <button v-for="p in clientVisiblePages" :key="p" type="button" :aria-label="'Clients page '+p"
+                :aria-current="p===clientPage?'page':undefined"
+                :class="['card-page-button',{current:p===clientPage}]" :disabled="busy||p===clientPage"
+                @click="changeDirectoryPage('clients',p)">{{p}}</button>
+            </div>
+            <span class="card-page-count">Page {{clientPage}} of {{clientPageCount}}</span>
+            <button type="button" class="btn outline small" :disabled="busy||clientPage===clientPageCount" @click="changeDirectoryPage('clients',clientPage+1)">Next →</button>
+            <button type="button" class="btn outline small" :disabled="busy||clientPage===clientPageCount" @click="changeDirectoryPage('clients',clientPageCount)">Last »</button>
+          </nav>
         </div>
       </section>
 
@@ -492,11 +521,11 @@
               <input id="report-to" type="date" v-model="reportTo" @change="reportPreset='custom'"
                 :min="reportFrom||undefined" :disabled="busy"></label>
             <label v-if="session.user.role==='admin'">Group report by
-              <select id="report-group" v-model="reportGroup" :disabled="busy">
+              <select id="report-group" v-model="reportGroup" :disabled="busy" @change="changeReportGroup">
                 <option value="by_brand">By brand</option><option value="by_client">By client</option>
               </select></label>
             <label v-else>Group report by
-              <select id="report-client-group" v-model="reportClientGroup" :disabled="busy" @change="loadReport">
+              <select id="report-client-group" v-model="reportClientGroup" :disabled="busy" @change="changeReportGroup">
                 <option value="currency">By currency</option>
                 <option value="brand">By brand</option>
               </select>
@@ -611,7 +640,7 @@
       </section>
 
       <section v-if="tab==='audit'" class="panel audit-workspace">
-        <div class="audit-heading"><div><span class="kicker">AUDIT LEDGER</span><h2>Admin audit logs <em>{{audits.length}}</em></h2>
+        <div class="audit-heading"><div><span class="kicker">AUDIT LEDGER</span><h2>Admin audit logs <em>{{auditTotal}}</em></h2>
           <p class="muted">Filter audit events by actor, action, outcome and exact UTC time down to the second. Filters run on the server before pagination.</p></div></div>
         <form class="audit-filters" @submit.prevent="loadAudit" aria-label="Audit log filters">
           <label>Action<input v-model.trim="auditAction" placeholder="e.g. card.issued" :disabled="busy"></label>
@@ -623,16 +652,39 @@
             <button type="button" class="btn outline" :disabled="busy" @click="clearAuditFilters">Clear all</button></div>
         </form>
         <div class="audit-filter-note"><span>Enter dates and HH:MM:SS in UTC (not local time). Both selected seconds are included; leave either field blank for an open-ended range.</span>
-          <span>Latest 50 matching events</span></div>
-        <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>UTC time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Record</th></tr></thead><tbody>
+          <span>All matching events · paginated</span></div>
+        <div class="card-pagination-summary directory-pagination-summary" ref="auditListTop">
+            <p role="status">Showing {{auditFirst}}–{{auditLast}} of {{auditTotal}} audit events</p>
+            <label for="audit-per-page">Rows per page
+              <select id="audit-per-page" v-model.number="auditPerPage" @change="changeDirectoryPerPage('audit')" :disabled="busy">
+                <option :value="10">10</option><option :value="25">25</option>
+                <option :value="50">50</option><option :value="100">100</option>
+              </select>
+            </label>
+          </div>
+        <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>UTC time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Record</th><th>Details</th></tr></thead><tbody>
           <tr v-for="e in audits" :key="e.id"><td class="mono">{{e.occurred_at}}</td><td><a v-if="canOpenAuditActor(e)" class="entity-link" :href="entityHref('clients',e.actor_id)" @click.prevent="navigateTo('clients',e.actor_id)">{{e.actor_email}}</a>
             <strong v-else>{{e.actor_email||'Unknown / system'}}</strong><small v-if="e.actor_id">User ID: {{e.actor_id}}</small></td>
             <td class="mono">{{e.action}}</td><td><span :class="['pill',e.outcome==='success'?'active':'inactive']">{{e.outcome}}</span></td>
             <td><a v-if="auditEntity(e)" class="entity-link" :href="entityHref(auditEntity(e).kind,auditEntity(e).id)" @click.prevent="navigateTo(auditEntity(e).kind,auditEntity(e).id)">{{auditRecordLabel(e)}}</a>
-              <strong v-else>{{auditRecordLabel(e)}}</strong><small v-if="e.record_id">{{e.record_type}} ID: {{e.record_id}}</small></td></tr>
-          <tr v-if="!audits.length"><td class="empty" colspan="5">No audit events match these filters. Adjust the date range or outcome and try again.</td></tr>
+              <strong v-else>{{auditRecordLabel(e)}}</strong><small v-if="e.record_id">{{e.record_type}} ID: {{e.record_id}}</small></td>
+            <td><button type="button" class="text-btn" :disabled="busy" @click="openAuditDetails(e)">View details</button></td></tr>
+          <tr v-if="!audits.length"><td class="empty" colspan="6">No audit events match these filters. Adjust the date range or outcome and try again.</td></tr>
         </tbody></table></div>
-        <p class="help">Showing up to 50 matching events. PINs and passwords are not included. Use the API Console for additional pages.</p>
+        <nav v-if="auditTotal>0" class="card-pagination directory-pagination" aria-label="Audit pagination">
+            <button type="button" class="btn outline small" :disabled="busy||auditPage===1" @click="changeDirectoryPage('audit',1)">« First</button>
+            <button type="button" class="btn outline small" :disabled="busy||auditPage===1" @click="changeDirectoryPage('audit',auditPage-1)">← Previous</button>
+            <div class="card-pages">
+              <button v-for="p in auditVisiblePages" :key="p" type="button" :aria-label="'Audit page '+p"
+                :aria-current="p===auditPage?'page':undefined"
+                :class="['card-page-button',{current:p===auditPage}]" :disabled="busy||p===auditPage"
+                @click="changeDirectoryPage('audit',p)">{{p}}</button>
+            </div>
+            <span class="card-page-count">Page {{auditPage}} of {{auditPageCount}}</span>
+            <button type="button" class="btn outline small" :disabled="busy||auditPage===auditPageCount" @click="changeDirectoryPage('audit',auditPage+1)">Next →</button>
+            <button type="button" class="btn outline small" :disabled="busy||auditPage===auditPageCount" @click="changeDirectoryPage('audit',auditPageCount)">Last »</button>
+          </nav>
+        <p class="help">Audit records are read-only. Event details open in a dialog; PINs and passwords are never intentionally displayed.</p>
       </section>
 
       <section v-if="tab==='console'" class="two-col console">
@@ -715,11 +767,75 @@
   </main>
   <button type="button" class="back-to-top" aria-label="Scroll to top"
           title="Back to top"
-          v-show="showBackToTop && !cardModalOpen && !reportDrilldownOpen && !errorModalOpen"
+          v-show="showBackToTop && !cardModalOpen && !reportDrilldownOpen && !errorModalOpen && !directoryModalKind"
           @click="scrollToTop">
     <span class="back-to-top-arrow" aria-hidden="true">↑</span>
     <span class="back-to-top-label">Top</span>
   </button>
+  <div v-if="directoryModalKind && directoryModalRecord" class="directory-detail-overlay"
+       @click.self="closeDirectoryModal()" @keydown.esc.stop.prevent="closeDirectoryModal()"
+       @keydown.tab="trapDirectoryModalFocus">
+    <section class="directory-detail-dialog" role="dialog" aria-modal="true" ref="directoryModalDialog"
+             aria-labelledby="directory-modal-title">
+      <header class="card-modal-header">
+        <div><span class="kicker">ADMIN · READ-ONLY DETAILS</span>
+          <h2 id="directory-modal-title" tabindex="-1" ref="directoryModalHeading">
+            {{directoryModalKind==='brands'?'Brand details':directoryModalKind==='clients'?'Client details':directoryModalKind==='products'?'Product details':'Audit event details'}}
+          </h2>
+          <p class="muted" v-if="directoryModalKind==='audit'">Event #{{directoryModalRecord.id}} · {{directoryModalRecord.occurred_at}}</p>
+        </div>
+        <button type="button" class="card-modal-close" aria-label="Close details"
+                @click="closeDirectoryModal()">×</button>
+      </header>
+      <div class="directory-detail-body">
+        <div class="record-details">
+          <dl v-if="directoryModalKind==='brands'">
+            <dt>Brand ID</dt><dd>#{{directoryModalRecord.id}}</dd>
+            <dt>Name</dt><dd><strong>{{directoryModalRecord.name}}</strong></dd>
+            <dt>Status</dt><dd><span :class="['pill',directoryModalRecord.state]">{{directoryModalRecord.state}}</span></dd>
+            <dt>Custom fields</dt><dd><pre class="directory-detail-json">{{pretty(directoryModalRecord.custom_fields)}}</pre></dd>
+          </dl>
+          <dl v-else-if="directoryModalKind==='clients'">
+            <dt>Client ID</dt><dd>#{{directoryModalRecord.id}}</dd>
+            <dt>Email</dt><dd><strong>{{directoryModalRecord.email}}</strong></dd>
+            <dt>Payout rate</dt><dd>{{directoryModalRecord.payout_rate}}%</dd>
+            <dt>Status</dt><dd><span :class="['pill',directoryModalRecord.active?'active':'inactive']">{{directoryModalRecord.active?'Active':'Disabled'}}</span></dd>
+            <dt>Created</dt><dd>{{directoryModalRecord.created_at}}</dd>
+          </dl>
+          <dl v-else-if="directoryModalKind==='products'">
+            <dt>Product ID</dt><dd>#{{directoryModalRecord.id}}</dd>
+            <dt>Name</dt><dd><strong>{{directoryModalRecord.name}}</strong></dd>
+            <dt>Brand</dt><dd><a class="entity-link" :href="entityHref('brands',directoryModalRecord.brand_id)"
+              @click.prevent="navigateTo('brands',directoryModalRecord.brand_id)">{{brandName(directoryModalRecord.brand_id)}}</a>
+              <small class="directory-detail-subtle">#{{directoryModalRecord.brand_id}}</small></dd>
+            <dt>Face value</dt><dd>{{reportMoney(directoryModalRecord.face_value,directoryModalRecord.currency)}}</dd>
+            <dt>Currency</dt><dd><span class="report-currency-badge">{{directoryModalRecord.currency}}</span></dd>
+            <dt>Status</dt><dd><span :class="['pill',directoryModalRecord.deleted_at?'inactive':directoryModalRecord.state]">
+              {{directoryModalRecord.deleted_at?'Soft-deleted':directoryModalRecord.state}}</span></dd>
+            <dt v-if="directoryModalRecord.deleted_at">Deleted at</dt>
+            <dd v-if="directoryModalRecord.deleted_at" class="mono">{{directoryModalRecord.deleted_at}}</dd>
+            <dt>Custom fields</dt><dd><pre class="directory-detail-json">{{pretty(directoryModalRecord.custom_fields)}}</pre></dd>
+          </dl>
+          <dl v-else>
+            <dt>Event ID</dt><dd>#{{directoryModalRecord.id}}</dd>
+            <dt>Timestamp (UTC)</dt><dd class="mono">{{directoryModalRecord.occurred_at}}</dd>
+            <dt>Actor</dt><dd>{{directoryModalRecord.actor_email||'Unknown / system'}} <small v-if="directoryModalRecord.actor_id">(#{{directoryModalRecord.actor_id}})</small></dd>
+            <dt>Action</dt><dd class="mono">{{directoryModalRecord.action}}</dd>
+            <dt>Outcome</dt><dd><span :class="['pill',directoryModalRecord.outcome==='success'?'active':'inactive']">{{directoryModalRecord.outcome}}</span></dd>
+            <dt>Record</dt><dd>{{auditRecordLabel(directoryModalRecord)}} <small v-if="directoryModalRecord.record_id">· {{directoryModalRecord.record_type}} #{{directoryModalRecord.record_id}}</small></dd>
+            <dt>Reason code</dt><dd>{{directoryModalRecord.reason_code||'—'}}</dd>
+            <dt>IP address</dt><dd class="mono">{{directoryModalRecord.ip_address||'—'}}</dd>
+            <dt>User agent</dt><dd class="directory-user-agent">{{directoryModalRecord.user_agent||'—'}}</dd>
+            <dt>Before snapshot</dt><dd><pre class="directory-detail-json">{{pretty(safeAuditFields(directoryModalRecord.before_data))}}</pre></dd>
+            <dt>After snapshot</dt><dd><pre class="directory-detail-json">{{pretty(safeAuditFields(directoryModalRecord.after_data))}}</pre></dd>
+          </dl>
+        </div>
+      </div>
+      <footer class="card-modal-footer">
+        <button type="button" class="btn outline" @click="closeDirectoryModal()">Close</button>
+      </footer>
+    </section>
+  </div>
   <div v-if="cardModalOpen && cardDetail && tab==='cards'" class="card-modal-overlay"
        @click.self="closeCardDetails()" @keydown.esc.stop.prevent="closeCardDetails()" @keydown.tab="trapCardModalFocus">
     <section ref="cardDetailDialog" class="card-detail-modal" role="dialog" aria-modal="true"
