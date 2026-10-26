@@ -40,6 +40,7 @@
     data() {
       return {
         tab: "overview", session: null, busy: false,
+        showBackToTop: false,
         loadingTable: false, loadingDetail: false, submitting: false,
         flash: { text: "", kind: "success" },
         validationErrors: [], lastApiError: null, errorModalOpen: false,
@@ -159,7 +160,25 @@
           .some(value => String(value || "").toLowerCase().includes(q)));
       }
     },
+    mounted() {
+      // Use the page scroll, not scrollable tables or modal bodies.
+      window.addEventListener("scroll", this.updateBackToTop, { passive: true });
+      this.updateBackToTop();
+    },
+    beforeUnmount() {
+      window.removeEventListener("scroll", this.updateBackToTop);
+    },
     methods: {
+      updateBackToTop() {
+        this.showBackToTop = window.scrollY > 360;
+      },
+      scrollToTop() {
+        if (this.cardModalOpen || this.reportDrilldownOpen || this.errorModalOpen) return;
+        window.scrollTo({
+          top: 0,
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
+        });
+      },
       cardSortAria(column) {
         return this.cardSortBy === column
           ? (this.cardSortDir === "asc" ? "ascending" : "descending") : "none";

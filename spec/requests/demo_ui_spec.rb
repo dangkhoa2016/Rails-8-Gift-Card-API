@@ -98,6 +98,11 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'class="report-drilldown-table"', 'class="report-drilldown-pages"'
       )
       expect(response.body).to include(
+        'class="back-to-top"', 'aria-label="Scroll to top"',
+        'v-show="showBackToTop && !cardModalOpen && !reportDrilldownOpen && !errorModalOpen"',
+        '@click="scrollToTop"'
+      )
+      expect(response.body).to include(
         'class="card-modal-overlay"', 'class="card-detail-modal"',
         'id="card-detail-modal-title"', '@keydown.tab="trapCardModalFocus"',
         '@keydown.esc.stop.prevent="closeCardDetails()"', '@click.self="closeCardDetails()"'
@@ -141,6 +146,13 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         "this.rememberApiError(error, method, path);", "lastApiError: null"
       )
       expect(response.body).to include("loadingTable: false", "submitting: false")
+      expect(response.body).to include(
+        "showBackToTop: false", 'mounted() {',
+        'window.addEventListener("scroll", this.updateBackToTop, { passive: true });',
+        'window.removeEventListener("scroll", this.updateBackToTop);',
+        'this.showBackToTop = window.scrollY > 360;',
+        'scrollToTop() {', 'window.scrollTo({'
+      )
       expect(response.body).to include(
         'cardPage: 1, cardPerPage: 25, cardTotal: 0',
         'cardSortBy: "", cardSortDir: "asc"',
@@ -242,6 +254,7 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include(".error-modal-overlay", ".console-error-summary")
       expect(response.body).to include(".card-search-form", "nav.card-pagination", ".card-modal-overlay", ".card-detail-modal")
       expect(response.body).to include(".card-sort-button", ".card-sort-icon")
+      expect(response.body).to include(".back-to-top", ".back-to-top:focus-visible")
       expect(response.body).to include(".report-workspace", ".report-filter-form",
         ".report-money-grid", ".report-money-card", ".report-stats",
         ".report-table--grouped th.report-col-group",
