@@ -54,7 +54,7 @@
         productForm: { brand_id: "", name: "", face_value: "100.00", currency: "USD", state: "active", custom_fields: "{}" },
         clientForm: { email: "", password: "", payout_rate: "90", active: true },
         issueForm: { product_id: "", key: "", with_pin: false },
-        issued: null,
+        issueProductQuery: "", issued: null, issuedHttpStatus: null,
         reportFrom: "", reportTo: "", reportGroup: "by_brand", reportData: null,
         auditAction: "", auditActor: "", auditOutcome: "", auditFrom: "", auditTo: "",
         consoleForm: { method: "GET", path: "/api/v1/client/catalog", body: "", key: "" },
@@ -70,6 +70,14 @@
       },
       heading() { return sections[this.tab][0]; },
       hint() { return sections[this.tab][1]; },
+      selectedIssueProduct() {
+        return this.catalog.find(p => p.id === Number(this.issueForm.product_id)) || null;
+      },
+      matchingIssueProducts() {
+        const q = this.issueProductQuery.trim().toLowerCase();
+        return this.catalog.filter(p => [p.name, p.brand_name, p.currency, p.face_value]
+          .some(value => String(value || "").toLowerCase().includes(q)));
+      },
       reportRows() { return Array.isArray(this.reportData?.data) ? this.reportData.data : []; },
       reportKeys() { return [...new Set(this.reportRows.flatMap(row => Object.keys(row)))]; },
       accessClient() { return this.clients.find(c => c.id === Number(this.clientId)) || null; },
@@ -126,6 +134,7 @@
           await this.go("catalog");
         } else if (kind === "issue-product" && !admin) {
           this.issueForm.product_id = id;
+          this.issueProductQuery = "";
           await this.go("issue");
         } else if (kind === "cards" && !admin) {
           // A card row already has all the fields in the detail response.
@@ -142,6 +151,7 @@
             this.cardDetail = result.payload.data;
             this.cards = [result.payload.data];
           }
+          await this.scrollToCardDetails();
         } else if (admin && kind === "brands-products") {
           this.brandId = id;
           await this.go("products");
@@ -233,16 +243,30 @@
           clients: this.clients, cards: this.cards };
         const existing = collections[kind].find(record => record.id === Number(id));
         if (existing) {
-          if (kind === "cards") this.cardDetail = existing;
-          else this.selectedDetail = { kind, data: existing };
+          if (kind === "cards") {
+            this.cardDetail = existing;
+            await this.scrollToCardDetails();
+          } else this.selectedDetail = { kind, data: existing };
           return;
         }
         // A deep-linked or paginated-out record is the only case needing GET show.
-        await this.execute(async () => {
+        const result = await this.execute(async () => {
           const res = await this.request("GET", apiRoot + routes[kind] + encodeURIComponent(id));
           if (kind === "cards") this.cardDetail = res.payload.data;
           else this.selectedDetail = { kind, data: res.payload.data };
+          return res;
         }, null, "detail");
+        if (kind === "cards" && result) await this.scrollToCardDetails();
+      },
+      async scrollToCardDetails() {
+        await this.$nextTick();
+        const detail = this.$refs.cardDetails;
+        if (!detail) return;
+        this.$refs.cardDetailsHeading?.focus({ preventScroll: true });
+        detail.scrollIntoView({
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
+          block: "start"
+        });
       },
       notify(message, kind = "success") {
         this.flash = { text: message, kind };
@@ -350,6 +374,8 @@
         this.loadingDetail = false;
         this.submitting = false;
         this.issued = null;
+        this.issuedHttpStatus = null;
+        this.issueProductQuery = "";
         this.selectedDetail = null;
         this.cardDetail = null;
         this.editingBrandId = this.editingProductId = this.editingClientId = null;
@@ -469,10 +495,9 @@
         if (this.catalogBrandId) params.set("brand_id", String(this.catalogBrandId));
         const res = await this.request("GET", apiRoot + "client/catalog" + (params.size ? "?" + params : ""));
         this.catalog = res.payload.data || [];
-        if (this.catalog.length && !this.catalog.some(p => p.id === Number(this.issueForm.product_id))) {
-          this.issueForm.product_id = this.catalog[0].id;
-        }
-        if (!this.catalog.length) this.issueForm.product_id = "";
+        // Do not silently select a different product when the current choice is gone.
+        if (!this.catalog.some(p => p.id === Number(this.issueForm.product_id)))
+          this.issueForm.product_id = "";
       },
       async fetchCards() {
         const q = new URLSearchParams({ per_page: "100" });
@@ -563,7 +588,21 @@
       },
       selectBrand(id) { this.navigateTo("brands-products", id); },
       selectClient(id) { this.navigateTo("grants", id); },
-      pickCatalog(item) { this.issueForm.product_id = item.id; this.go("issue"); },
+      pickCatalog(item) { this.issueForm.product_id = item.id; this.issueProductQuery = ""; this.go("issue"); },
+      createIssueKey() {
+        if (this.busy) return;
+        if (typeof window.crypto?.randomUUID !== "function")
+          return this.notify("Automatic key generation is unavailable. Enter your own unique key.", "error");
+        this.issueForm.key = "order-" + window.crypto.randomUUID();
+      },
+      async scrollToIssueResult() {
+        await this.$nextTick();
+        const result = this.$refs.issueResult;
+        if (!result) return;
+        this.$refs.issueResultHeading?.focus({ preventScroll: true });
+        result.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches
+          ? "instant" : "smooth", block: "start" });
+      },
       async saveBrand() {
         await this.execute(async () => {
           const editing = this.editingBrandId !== null;
@@ -656,14 +695,23 @@
         }, "Access revoked for " + g.product_name + ".");
       },
       async issueCard() {
-        if (!this.issueForm.key || !this.issueForm.product_id) return this.notify("Product and idempotency key required.", "error");
-        await this.execute(async () => {
+        if (!this.issueForm.key.trim() || !this.selectedIssueProduct)
+          return this.notify("Select an eligible product and enter an idempotency key.", "error");
+        const result = await this.execute(async () => {
           const res = await this.request("POST", apiRoot + "client/cards",
             { product_id: Number(this.issueForm.product_id), with_pin: this.issueForm.with_pin },
-            this.issueForm.key);
+            this.issueForm.key.trim());
           this.issued = res.payload.data;
+          this.issuedHttpStatus = res.status;
           return res;
         }, res => "Card request accepted: HTTP " + res.status + (res.status === 200 ? " (idempotent replay)." : " (created)."));
+        if (result) {
+          // Start the next issuance with a clean form, but retain the last Card response.
+          // A failed request keeps its inputs so the Client can inspect or correct them.
+          this.issueForm = { product_id: "", key: "", with_pin: false };
+          this.issueProductQuery = "";
+          await this.scrollToIssueResult();
+        }
       },
       async cancelCard(c) {
         if (!window.confirm("Cancel " + c.product_name + " (" + c.activation_number + ")? This action cannot be reversed.")) return;

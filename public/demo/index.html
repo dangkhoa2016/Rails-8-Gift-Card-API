@@ -290,14 +290,63 @@
         <div v-if="!catalog.length" class="empty">No eligible products match these filters, or no Admin grant is available.</div>
       </section>
 
-      <section v-if="tab==='issue'" class="two-col">
-        <div class="panel"><span class="kicker">CARD ISSUANCE</span><h2>Issue a gift card</h2><form class="stack" @submit.prevent="issueCard">
-          <label>Product<select v-model="issueForm.product_id" required><option value="" disabled>Select product</option><option v-for="p in catalog" :value="p.id">{{p.name}} – {{p.face_value}} {{p.currency}}</option></select></label>
-          <label>Idempotency key<input v-model.trim="issueForm.key" required placeholder="order-unique-reference-001"></label>
-          <label class="checkline"><input type="checkbox" v-model="issueForm.with_pin"> Generate PIN</label>
-          <button :class="['btn','primary',{processing:submitting}]" :disabled="busy">Issue card</button></form><p class="help">Exact retry: HTTP 200. New issue: HTTP 201. Same key with different payload: HTTP 409.</p>
+      <section v-if="tab==='issue'" class="issue-workspace">
+        <div class="issue-intro"><div><span class="kicker">CLIENT · GIFT CARD ISSUANCE</span>
+          <h2>Issue a gift card</h2><p class="muted">Choose an eligible product, set your request options, then review the result. Only authorized products are available.</p></div>
+          <span class="issue-count">{{catalog.length}} eligible {{catalog.length===1?'product':'products'}}</span></div>
+        <div class="issue-columns">
+          <div class="panel issue-product-panel">
+            <div class="issue-panel-heading"><span class="issue-step-number">01</span><div><span class="kicker">CHOOSE A PRODUCT</span><h2>Available gift cards</h2></div></div>
+            <label for="issue-product-search">Find a product
+              <input id="issue-product-search" type="search" v-model.trim="issueProductQuery" placeholder="Search product, brand, value or currency" autocomplete="off"></label>
+            <div class="issue-product-list" aria-label="Eligible products">
+              <button v-for="p in matchingIssueProducts" :key="p.id" type="button"
+                :class="['issue-product-choice',{selected:p.id===Number(issueForm.product_id)}]"
+                :aria-pressed="p.id===Number(issueForm.product_id)" :disabled="busy"
+                :aria-label="'Select '+p.name+' from '+p.brand_name" @click="issueForm.product_id=p.id">
+                <span class="issue-product-icon" aria-hidden="true">◇</span>
+                <span class="issue-product-copy"><strong>{{p.name}}</strong><small>{{p.brand_name}}</small></span>
+                <span class="issue-product-side"><strong>{{money(p.face_value,p.currency)}}</strong>
+                  <small>{{p.id===Number(issueForm.product_id)?'✓ Selected':'Select →'}}</small></span>
+              </button>
+              <div v-if="!catalog.length" class="issue-empty">No authorized active products are available. Ask an Admin to grant access, or check the Catalog.</div>
+              <div v-else-if="!matchingIssueProducts.length" class="issue-empty">No products match your search. Try a shorter name or clear the search.</div>
+            </div>
+            <p class="help">Products shown here use your existing Client permissions. <a href="#/catalog" class="entity-link" @click.prevent="go('catalog')">Browse catalog →</a></p>
+          </div>
+          <div class="panel issue-confirm-panel">
+            <div class="issue-panel-heading"><span class="issue-step-number">02</span><div><span class="kicker">CONFIGURE THE REQUEST</span><h2>Review and issue</h2></div></div>
+            <div v-if="selectedIssueProduct" class="issue-selected-summary">
+              <span class="issue-selected-check" aria-hidden="true">✓</span>
+              <div><small>SELECTED PRODUCT</small><strong>{{selectedIssueProduct.name}}</strong><span>{{selectedIssueProduct.brand_name}} · {{money(selectedIssueProduct.face_value,selectedIssueProduct.currency)}}</span></div>
+            </div>
+            <div v-else class="issue-selected-empty">Choose an eligible gift card from Step 01 to continue.</div>
+            <form class="issue-form" @submit.prevent="issueCard">
+              <label for="issue-idempotency-key">Idempotency key
+                <div class="issue-key-row"><input id="issue-idempotency-key" v-model.trim="issueForm.key" required
+                  placeholder="Enter your unique order reference" autocomplete="off" :disabled="busy">
+                  <button type="button" class="btn outline" :disabled="busy" @click="createIssueKey">Generate key</button></div></label>
+              <p class="issue-field-note">The form clears after success. For a safe retry (HTTP 200), save this key and re-enter the same Product and PIN option.</p>
+              <label class="issue-pin-toggle"><input type="checkbox" v-model="issueForm.with_pin" :disabled="busy">
+                <span><strong>Generate a PIN</strong><small>Optional · shown only in the issuance response</small></span></label>
+              <div class="issue-safety-note"><strong>Before you issue</strong><span>New card: HTTP 201. Same key + same options: HTTP 200 (no duplicate). Same key + changed options: HTTP 409.</span></div>
+              <button type="submit" :class="['btn','primary','issue-submit',{processing:submitting}]" :disabled="busy||!selectedIssueProduct||!issueForm.key.trim()">Issue gift card →</button>
+            </form>
+          </div>
         </div>
-        <div class="panel"><span class="kicker">LATEST ISSUANCE RESPONSE</span><h2>Card details</h2><div class="gift-card" v-if="issued"><small>ACTIVATION NUMBER</small><strong>{{issued.activation_number}}</strong><div>{{issued.face_value_snapshot}} {{issued.currency_snapshot}} · {{issued.status}}</div><div class="pin" v-if="issued.pin">PIN: {{issued.pin}}</div></div><div class="empty" v-else>Issue a card to view the response.</div><p class="help">The PIN is deliberately absent from GET card responses and is cleared on sign-out.</p></div>
+        <div v-if="issued" class="panel issue-result-panel" ref="issueResult" role="region" aria-label="Latest card issuance result">
+          <div class="issue-result-heading"><div><span class="kicker">LATEST ISSUANCE RESPONSE</span>
+            <h2 ref="issueResultHeading" tabindex="-1">{{issuedHttpStatus===200?'Existing card returned':'Gift card issued successfully'}}</h2>
+            <p class="muted">{{issuedHttpStatus===200?'HTTP 200 · Safe idempotent replay; no duplicate card was created.':'HTTP 201 · A new gift card was created.'}}</p></div>
+            <span :class="['issue-response-status',{replay:issuedHttpStatus===200}]">HTTP {{issuedHttpStatus}}</span></div>
+          <div class="issue-result-layout"><div class="gift-card"><small>ACTIVATION NUMBER</small><strong>{{issued.activation_number}}</strong>
+            <div>{{money(issued.face_value_snapshot,issued.currency_snapshot)}} · {{issued.status}}</div><div class="pin" v-if="issued.pin">PIN: {{issued.pin}}</div></div>
+            <div class="issue-result-details"><div><span>Product</span><strong>{{issued.product_name}}</strong></div><div><span>Brand</span><strong>{{issued.brand_name}}</strong></div>
+              <div><span>Card ID</span><strong>#{{issued.id}}</strong></div><div><span>Payout</span><strong>{{money(issued.payout_amount_snapshot,issued.currency_snapshot)}}</strong></div>
+              <button class="btn outline" type="button" :disabled="busy" @click="navigateTo('cards',issued.id)">View in My cards →</button></div></div>
+          <p class="help">PINs are not included in later GET card responses and are cleared when you sign out. Do not share screenshots containing a PIN.</p>
+        </div>
+        <div v-else class="issue-result-placeholder" role="status">Your latest issuance result will appear below the form after a successful request.</div>
       </section>
 
       <section v-if="tab==='cards'" class="panel"><span class="kicker">CARD LIFECYCLE</span><h2>My cards <em>{{cards.length}}</em></h2>
@@ -313,7 +362,8 @@
             <button class="text-btn dangerous" @click="cancelCard(c)" :disabled="busy||c.status!=='issued'">Cancel</button></div></td></tr>
         <tr v-if="!cards.length"><td colspan="6" class="empty">No cards found</td></tr>
         </tbody></table></div>
-        <div class="record-details" v-if="cardDetail"><h3>Gift card details</h3><dl>
+        <div class="record-details card-details" ref="cardDetails" v-if="cardDetail" role="region" aria-label="Selected gift card details">
+          <div class="card-details-heading"><h3 ref="cardDetailsHeading" tabindex="-1">Gift card details</h3><span :class="['pill',cardDetail.status==='issued'?'issued':'cancelled']">{{cardDetail.status}}</span></div><dl>
           <dt>Product</dt><dd>{{cardDetail.product_name}}</dd><dt>Brand</dt><dd>{{cardDetail.brand_name}}</dd>
           <dt>Activation</dt><dd class="mono">{{cardDetail.activation_number}}</dd>
           <dt>Face value</dt><dd>{{money(cardDetail.face_value_snapshot,cardDetail.currency_snapshot)}}</dd>
