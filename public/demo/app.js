@@ -44,8 +44,8 @@
         flash: { text: "", kind: "success" },
         validationErrors: [], lastApiError: null, errorModalOpen: false,
         loginForm: { email: "", password: "" },
-        brands: [], products: [], clients: [], grants: [], catalog: [], cards: [], audits: [],
-        brandId: "", clientId: "", cardStatus: "", cardPinFilter: "",
+        brands: [], products: [], clients: [], grants: [], catalog: [], issueCatalog: [], cards: [], audits: [],
+        brandId: "", clientId: "", cardStatus: "", cardPinFilter: "", cardQuery: "",
         accessClientQuery: "", accessPickerOpen: false, accessProductQuery: "", accessGrantQuery: "",
         editingBrandId: null, editingProductId: null, editingClientId: null,
         selectedDetail: null, cardDetail: null, catalogQuery: "", catalogCurrency: "",
@@ -73,11 +73,11 @@
       heading() { return sections[this.tab][0]; },
       hint() { return sections[this.tab][1]; },
       selectedIssueProduct() {
-        return this.catalog.find(p => p.id === Number(this.issueForm.product_id)) || null;
+        return this.issueCatalog.find(p => p.id === Number(this.issueForm.product_id)) || null;
       },
       matchingIssueProducts() {
         const q = this.issueProductQuery.trim().toLowerCase();
-        return this.catalog.filter(p => [p.name, p.brand_name, p.currency, p.face_value]
+        return this.issueCatalog.filter(p => [p.name, p.brand_name, p.currency, p.face_value]
           .some(value => String(value || "").toLowerCase().includes(q)));
       },
       reportRows() { return Array.isArray(this.reportData?.data) ? this.reportData.data : []; },
@@ -130,31 +130,24 @@
         if (!Number.isSafeInteger(id) || id <= 0) return;
         const admin = this.session.user.role === "admin";
         if (kind === "catalog-brand" && !admin) {
-          this.catalogBrandId = id;
-          this.catalogQuery = "";
-          this.catalogCurrency = "";
-          await this.go("catalog");
+          // An explicit Brand link is an intentional, one-time Catalog filter.
+          await this.go("catalog", { brandId: id });
         } else if (kind === "issue-product" && !admin) {
-          this.issueForm.product_id = id;
-          this.issueProductQuery = "";
-          await this.go("issue");
+          // Transfer just the selected Product ID. Catalog filters never travel.
+          await this.go("issue", { selectedProductId: id });
         } else if (kind === "cards" && !admin) {
-          this.hideCardPin();
-          this.forgetIssuedPin();
-          // A card row already has all the fields in the detail response.
-          const card = this.cards.find(item => item.id === id);
-          if (card) {
-            this.tab = "cards";
-            this.cardDetail = card;
-            this.selectedDetail = null;
-          } else {
+          // A cross-page link opens the normal, unfiltered My cards list first.
+          // The target detail is independent of the first 100 visible rows.
+          await this.go("cards");
+          if (!this.session || this.tab !== "cards" || this.lastApiError) return;
+          let card = this.cards.find(item => item.id === id);
+          if (!card) {
             const result = await this.execute(
               () => this.request("GET", apiRoot + "client/cards/" + id), null, "detail");
             if (!result) return;
-            this.tab = "cards";
-            this.cardDetail = result.payload.data;
-            this.cards = [result.payload.data];
+            card = result.payload.data;
           }
+          this.cardDetail = card;
           await this.scrollToCardDetails();
         } else if (admin && kind === "brands-products") {
           this.brandId = id;
@@ -163,7 +156,7 @@
           this.clientId = id;
           this.accessClientQuery = "";
           this.accessPickerOpen = false;
-          await this.go("grants", true);
+          await this.go("grants", { preserveGrantClient: true });
         } else if (admin && ["brands", "clients", "products"].includes(kind)) {
           // The directory index and show endpoints serialize identical fields.
           // Prefer the current directory row; for uncached cross-page targets,
@@ -496,14 +489,18 @@
         this.issued = null;
         this.issuedHttpStatus = null;
         this.issueProductQuery = "";
+        this.issueForm = { product_id: "", key: "", with_pin: false };
+        this.catalogQuery = "";
+        this.catalogCurrency = "";
+        this.catalogBrandId = "";
         this.selectedDetail = null;
         this.cardDetail = null;
         this.editingBrandId = this.editingProductId = this.editingClientId = null;
         this.brands = []; this.products = []; this.clients = []; this.grants = [];
         this.clientId = ""; this.accessClientQuery = ""; this.accessPickerOpen = false;
         this.accessProductQuery = ""; this.accessGrantQuery = "";
-        this.catalog = []; this.cards = []; this.audits = [];
-        this.cardStatus = ""; this.cardPinFilter = "";
+        this.catalog = []; this.issueCatalog = []; this.cards = []; this.audits = [];
+        this.cardStatus = ""; this.cardPinFilter = ""; this.cardQuery = "";
         this.loginForm.email = "";
         this.loginForm.password = "";
         this.consoleForm.body = "";
@@ -541,10 +538,29 @@
           this.notify("Signed out. Your in-memory token has been discarded.");
         }
       },
-      async go(section, preserveGrantClient = false) {
+      async go(section, { preserveGrantClient = false, brandId = null, selectedProductId = null } = {}) {
         if (this.busy || !this.menu.some(item => item.id === section)) return;
         this.hideCardPin();
         if (section !== "issue") this.forgetIssuedPin();
+        if (section === "catalog") {
+          // A new Catalog visit must never inherit old searches/currency/Brand.
+          // The Brand link is the only explicit navigation filter.
+          this.catalogQuery = "";
+          this.catalogCurrency = "";
+          this.catalogBrandId = brandId || "";
+        }
+        if (section === "issue") {
+          // Sidebar opens a clean chooser; Catalog product links supply only an ID.
+          this.issueProductQuery = "";
+          this.issueForm.product_id = selectedProductId || "";
+        }
+        if (section === "cards") {
+          // Each My cards visit starts unfiltered, even when opened via a Card link.
+          this.cardQuery = "";
+          this.cardStatus = "";
+          this.cardPinFilter = "";
+          this.cards = [];
+        }
         // Navigation from a Client or Audit link retains the targeted Client;
         // a direct menu visit asks for an explicit Client selection.
         if (section === "grants" && !preserveGrantClient && this.tab !== section) {
@@ -570,7 +586,8 @@
             if (this.tab === "reports") await this.fetchReport();
             if (this.tab === "audit") await this.fetchAudit();
           } else {
-            if (["catalog", "issue"].includes(this.tab)) await this.fetchCatalog();
+            if (this.tab === "catalog") await this.fetchCatalog();
+            if (this.tab === "issue") await this.fetchIssueCatalog();
             if (this.tab === "cards") await this.fetchCards();
             if (this.tab === "reports") await this.fetchReport();
           }
@@ -618,13 +635,19 @@
         if (this.catalogBrandId) params.set("brand_id", String(this.catalogBrandId));
         const res = await this.request("GET", apiRoot + "client/catalog" + (params.size ? "?" + params : ""));
         this.catalog = res.payload.data || [];
-        // Do not silently select a different product when the current choice is gone.
-        if (!this.catalog.some(p => p.id === Number(this.issueForm.product_id)))
+      },
+      async fetchIssueCatalog() {
+        // Issue card always has the full eligible set, independently of Catalog.
+        const res = await this.request("GET", apiRoot + "client/catalog");
+        this.issueCatalog = res.payload.data || [];
+        // Clear a stale one-time selection if permission was revoked meanwhile.
+        if (!this.issueCatalog.some(p => p.id === Number(this.issueForm.product_id)))
           this.issueForm.product_id = "";
       },
       async fetchCards() {
         this.hideCardPin();
         const q = new URLSearchParams({ per_page: "100" });
+        if (this.cardQuery.trim()) q.set("q", this.cardQuery.trim());
         if (this.cardStatus) q.set("status", this.cardStatus);
         if (this.cardPinFilter) q.set("has_pin", this.cardPinFilter === "with" ? "true" : "false");
         const res = await this.request("GET", apiRoot + "client/cards?" + q);
@@ -704,6 +727,7 @@
         if (this.busy) return;
         this.cardStatus = "";
         this.cardPinFilter = "";
+        this.cardQuery = "";
         return this.loadCards();
       },
       async loadCatalog() { await this.execute(() => this.fetchCatalog(), null, "table"); },
@@ -726,7 +750,7 @@
       },
       selectBrand(id) { this.navigateTo("brands-products", id); },
       selectClient(id) { this.navigateTo("grants", id); },
-      pickCatalog(item) { this.issueForm.product_id = item.id; this.issueProductQuery = ""; this.go("issue"); },
+      pickCatalog(item) { return this.navigateTo("issue-product", item.id); },
       createIssueKey() {
         if (this.busy) return;
         if (typeof window.crypto?.randomUUID !== "function")

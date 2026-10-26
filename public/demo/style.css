@@ -276,3 +276,10 @@ input[aria-invalid="true"]:focus{box-shadow:0 0 0 3px #d54c5b25}
 .error-modal-raw{white-space:pre-wrap;max-height:min(53vh,500px);overflow:auto;font-size:12px}
 .error-modal-actions{display:flex;justify-content:end;margin-top:16px}
 @media(max-width:710px){.error-modal{padding:17px;max-height:92vh}.error-modal-overlay{padding:10px}.error-modal-raw{max-height:48vh}.console-error-summary .btn{width:100%}}
+
+/* Search all of My cards via the server before the 100-row display limit. */
+.card-search-form{display:flex;align-items:end;gap:9px;flex:1 1 290px;min-width:min(290px,100%)}
+.card-search-form label{flex:1;min-width:0}
+.card-search-form input{width:100%}
+.card-search-form .btn{flex-shrink:0}
+@media(max-width:710px){.card-search-form{width:100%;flex-wrap:wrap}.card-search-form .btn{width:100%}}

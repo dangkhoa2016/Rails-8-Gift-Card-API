@@ -298,7 +298,7 @@
       <section v-if="tab==='issue'" class="issue-workspace">
         <div class="issue-intro"><div><span class="kicker">CLIENT · GIFT CARD ISSUANCE</span>
           <h2>Issue a gift card</h2><p class="muted">Choose an eligible product, set your request options, then review the result. Only authorized products are available.</p></div>
-          <span class="issue-count">{{catalog.length}} eligible {{catalog.length===1?'product':'products'}}</span></div>
+          <span class="issue-count">{{issueCatalog.length}} eligible {{issueCatalog.length===1?'product':'products'}}</span></div>
         <div class="issue-columns">
           <div class="panel issue-product-panel">
             <div class="issue-panel-heading"><span class="issue-step-number">01</span><div><span class="kicker">CHOOSE A PRODUCT</span><h2>Available gift cards</h2></div></div>
@@ -314,7 +314,7 @@
                 <span class="issue-product-side"><strong>{{money(p.face_value,p.currency)}}</strong>
                   <small>{{p.id===Number(issueForm.product_id)?'✓ Selected':'Select →'}}</small></span>
               </button>
-              <div v-if="!catalog.length" class="issue-empty">No authorized active products are available. Ask an Admin to grant access, or check the Catalog.</div>
+              <div v-if="!issueCatalog.length" class="issue-empty">No authorized active products are available. Ask an Admin to grant access, or check the Catalog.</div>
               <div v-else-if="!matchingIssueProducts.length" class="issue-empty">No products match your search. Try a shorter name or clear the search.</div>
             </div>
             <p class="help">Products shown here use your existing Client permissions. <a href="#/catalog" class="entity-link" @click.prevent="go('catalog')">Browse catalog →</a></p>
@@ -358,6 +358,12 @@
 
       <section v-if="tab==='cards'" class="panel"><span class="kicker">CARD LIFECYCLE</span><h2>My cards <em>{{cards.length}}</em></h2>
         <div class="card-filter-bar" aria-label="Card filters">
+          <form class="card-search-form" @submit.prevent="loadCards">
+            <label for="card-search">Search card, Product or Brand
+              <input id="card-search" type="search" v-model.trim="cardQuery" maxlength="100"
+                placeholder="Activation number, Product or Brand" autocomplete="off" :disabled="busy"></label>
+            <button :class="['btn','primary',{processing:submitting}]" type="submit" :disabled="busy">Search</button>
+          </form>
           <label class="card-status-filter">Status<select v-model="cardStatus" @change="loadCards" :disabled="busy"><option value="">All statuses</option>
             <option value="issued">Issued</option><option value="cancelled">Cancelled</option></select></label>
           <fieldset class="card-pin-filters"><legend>PIN availability</legend><div class="card-pin-options">
@@ -366,7 +372,7 @@
           </div></fieldset>
           <button class="btn outline card-clear-filters" type="button" :disabled="busy" @click="clearCardFilters">Clear filters</button>
         </div>
-        <p class="card-filter-note">Choose one checkbox to filter by PIN availability. Neither selected = all cards. PIN values are never shown in this list.</p>
+        <p class="card-filter-note">Search across all your Cards by activation number, Product or Brand; combine with Status and PIN availability. Clear filters restores the latest Cards. PIN values are never shown in this list.</p>
         <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>Gift card</th><th>Product / Brand</th><th>Face value</th><th>Payout</th><th>Status</th><th>PIN</th><th>Actions</th></tr></thead><tbody>
         <tr v-for="c in cards" :key="c.id"><td><a class="entity-link mono" :href="entityHref('cards',c.id)" @click.prevent="navigateTo('cards',c.id)">{{c.activation_number}}</a><small>Card ID: {{c.id}}</small></td>
           <td><strong>{{c.product_name}}</strong><small>{{c.brand_name}}</small></td>
@@ -405,7 +411,7 @@
           <dt>Issued at</dt><dd>{{cardDetail.issued_at}}</dd>
           <dt>Cancelled at</dt><dd>{{cardDetail.cancelled_at||'Not cancelled'}}</dd>
         </dl><p class="help">Regular Card details only return PIN availability. Reveal PIN requires your account password, is audited and rate-limited; the PIN is automatically hidden after 30 seconds.</p></div>
-        <p class="help">Displays up to 100 most recent cards; details and associations come from the real Rails API.</p>
+        <p class="help">Displays up to 100 matching cards; search and filters run on the server before pagination. Selected Card details may be outside this first page.</p>
       </section>
 
       <section v-if="tab==='reports'" class="panel"><span class="kicker">EVENT-TIME FINANCIAL REPORT</span><h2>{{session.user.role==='admin'?'Administrative reports':'Personal spending'}}</h2><div class="filters">
