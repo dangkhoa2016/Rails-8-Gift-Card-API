@@ -83,7 +83,10 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include(
         'class="panel report-workspace"', 'class="report-filter-panel"',
         'class="report-stats"', 'class="report-money-grid"',
-        'class="report-table"', 'class="report-breakdown"',
+        "['report-table', {'report-table--grouped':", 'class="report-breakdown"',
+        'class="report-col-currency"', 'class="report-col-count"',
+        'class="report-col-money"', 'class="report-col-breakdown"',
+        'class="report-col-group"',
         'class="report-empty"', 'class="report-raw"',
         'v-model="reportGroup"', 'value="by_brand"', 'value="by_client"',
         'v-model="reportClientGroup"', 'id="report-client-group"',
@@ -233,7 +236,10 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include(".card-search-form", "nav.card-pagination", ".card-modal-overlay", ".card-detail-modal")
       expect(response.body).to include(".card-sort-button", ".card-sort-icon")
       expect(response.body).to include(".report-workspace", ".report-filter-form",
-        ".report-money-grid", ".report-money-card", ".report-stats")
+        ".report-money-grid", ".report-money-card", ".report-stats",
+        ".report-table--grouped th.report-col-group",
+        ".report-table th.report-col-count,.report-table td.report-col-count",
+        ".report-table th.report-col-money,.report-table td.report-col-money")
     end
   end
 

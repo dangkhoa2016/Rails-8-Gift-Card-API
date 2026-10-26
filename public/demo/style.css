@@ -368,15 +368,32 @@ th[aria-sort="ascending"] .card-sort-icon,th[aria-sort="descending"] .card-sort-
 .report-money-foot{border-top:1px solid #dce6f4;margin-top:17px;padding-top:13px;display:flex;flex-direction:column;gap:5px;color:#8195ad;font-size:11px;overflow-wrap:anywhere}
 .report-detail-heading{margin:29px 0 12px}
 .report-table-scroll{width:100%;overflow-x:auto;border:1px solid #e1e9f3;border-radius:12px}
-.report-table{min-width:675px;white-space:nowrap;font-size:12px}
-.report-table th{padding:14px 12px}
-.report-table td{padding:15px 12px;white-space:nowrap;min-width:0}
-.report-table td:first-child{max-width:260px;white-space:normal;overflow-wrap:anywhere}
-.report-numeric{font-variant-numeric:tabular-nums;text-align:right}
+.report-table{min-width:790px;width:100%;table-layout:fixed;white-space:nowrap;font-size:12px}
+.report-table.report-table--grouped{min-width:1030px}
+.report-table th,.report-table td{box-sizing:border-box;vertical-align:middle;padding:15px 14px}
+.report-table th{font-size:10px;letter-spacing:.65px;white-space:nowrap}
+.report-table td{white-space:nowrap;min-width:0}
+.report-table th.report-col-currency{width:13%}
+.report-table th.report-col-count{width:11%}
+.report-table th.report-col-money{width:24%}
+.report-table th.report-col-breakdown{width:17%}
+.report-table--grouped th.report-col-group{width:19%}
+.report-table--grouped th.report-col-currency{width:10%}
+.report-table--grouped th.report-col-count{width:9%}
+.report-table--grouped th.report-col-money{width:19%}
+.report-table--grouped th.report-col-breakdown{width:15%}
+.report-table th.report-col-currency,.report-table td.report-col-currency,
+.report-table th.report-col-group,.report-table td.report-col-group,
+.report-table th.report-col-breakdown,.report-table td.report-col-breakdown{text-align:left}
+.report-table th.report-col-count,.report-table td.report-col-count{text-align:center}
+.report-table th.report-col-money,.report-table td.report-col-money{text-align:right}
+.report-table td.report-col-group{white-space:normal;overflow-wrap:anywhere;line-height:1.45}
+.report-table td.report-col-money{font-variant-numeric:tabular-nums;font-feature-settings:"tnum"}
+.report-numeric{font-variant-numeric:tabular-nums}
 .report-net{font-weight:800;color:#2e578f}
-.report-table-currency{display:inline-block;font-size:11px;font-weight:850;border:1px solid #d6e4f6;background:#edf5ff;color:#3265ab;padding:6px 9px;border-radius:7px}
-.report-breakdown{margin:0;min-width:105px}
-.report-breakdown summary{color:#326ec8;font-size:11px;font-weight:800;padding:5px;white-space:nowrap}
+.report-table-currency{display:inline-flex;align-items:center;justify-content:center;min-width:44px;font-size:11px;font-weight:850;border:1px solid #d6e4f6;background:#edf5ff;color:#3265ab;padding:6px 9px;border-radius:7px}
+.report-breakdown{margin:0;min-width:0}
+.report-breakdown summary{display:inline-flex;align-items:center;gap:5px;color:#326ec8;font-size:11px;font-weight:800;padding:5px 0;white-space:nowrap;cursor:pointer}
 .report-breakdown dl{display:grid;grid-template-columns:max-content max-content;gap:8px 11px;padding:10px;background:#f6f9ff;border:1px solid #e2ebfa;border-radius:9px}
 .report-breakdown dt{color:#8192a8;font-size:10px}
 .report-breakdown dd{margin:0;text-align:right;font-size:10px;color:#294b70;font-weight:700}
