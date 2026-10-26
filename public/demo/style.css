@@ -130,7 +130,7 @@ input[aria-invalid="true"]:focus{box-shadow:0 0 0 3px #d54c5b25}
 .access-panel>.muted{min-height:42px;max-width:none;margin:0 0 18px}
 .access-filters{display:grid;grid-template-columns:1fr 1fr;gap:11px;margin-bottom:14px}
 .access-grant-filter{margin-bottom:14px}
-.access-list{display:flex;flex-direction:column;gap:10px;min-height:84px;max-height:585px;overflow-y:auto;scrollbar-gutter:stable;padding:2px 3px 3px 1px}
+.access-list{display:flex;flex-direction:column;gap:10px;min-height:84px;max-height:585px;overflow-y:auto;scrollbar-gutter:auto;padding:2px 0 3px}
 .access-list.is-loading{opacity:.45;pointer-events:none}
 .access-item{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:15px 13px;border:1px solid #e3eaf5;border-radius:12px;background:#fff;transition:background .15s,border-color .15s}
 .access-item:hover{border-color:#b9cee9;background:#f9fbff}
