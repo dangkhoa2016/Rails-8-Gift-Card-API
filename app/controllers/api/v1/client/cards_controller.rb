@@ -7,6 +7,22 @@ module Api
 
         def index
           scope = current_user.cards.includes(product: :brand).order(id: :desc)
+          if request.query_parameters.key?("q")
+            query = request.query_parameters["q"]
+            unless query.is_a?(String) && query.length <= 100
+              return render json: { error: { code: "invalid_filter",
+                message: "Search must be a text value of up to 100 characters." } },
+                status: :unprocessable_content
+            end
+            term = query.strip
+            if term.present?
+              pattern = "%#{ActiveRecord::Base.sanitize_sql_like(term.downcase)}%"
+              scope = scope.joins(product: :brand).where(
+                "LOWER(cards.activation_number) LIKE :pattern OR " \
+                "LOWER(products.name) LIKE :pattern OR " \
+                "LOWER(brands.name) LIKE :pattern", pattern: pattern)
+            end
+          end
           scope = scope.where(status: params[:status]) if %w[issued cancelled].include?(params[:status])
           if request.query_parameters.key?("has_pin")
             case request.query_parameters["has_pin"]

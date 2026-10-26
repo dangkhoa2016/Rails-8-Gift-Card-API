@@ -52,12 +52,21 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'value="success"', 'value="refused"'
       )
       expect(response.body).to include(
+        'issueCatalog.length', 'v-if="!issueCatalog.length"',
+        "navigateTo('issue-product',p.id)", "navigateTo('catalog-brand',p.brand_id)"
+      )
+      expect(response.body).to include(
         'class="issue-workspace"', 'class="issue-columns"',
         'id="issue-product-search"', 'v-for="p in matchingIssueProducts"',
         '@click="issueForm.product_id=p.id"', '@click="createIssueKey"',
         '@submit.prevent="issueCard"', 'ref="issueResult"',
         'ref="cardDetails"', 'ref="cardDetailsHeading"',
         "@click=\"inspect('cards',c.id)\""
+      )
+      expect(response.body).to include(
+        'id="card-search"', 'v-model.trim="cardQuery"',
+        '@submit.prevent="loadCards"', 'class="card-search-form"',
+        "Search card, Product or Brand"
       )
       expect(response.body).to include(
         'class="card-pin-filters"', 'v-model="cardStatus"',
@@ -107,6 +116,22 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         "Email address is already in use. Please enter a different email address."
       )
       expect(response.body).to include(
+        "catalog: [], issueCatalog: []", "return this.issueCatalog.find(",
+        "return this.issueCatalog.filter(",
+        'this.go("issue", { selectedProductId: id })',
+        'this.go("catalog", { brandId: id })',
+        "async fetchIssueCatalog()", 'this.issueCatalog = res.payload.data || [];',
+        'if (this.tab === "catalog") await this.fetchCatalog();',
+        'if (this.tab === "issue") await this.fetchIssueCatalog();',
+        'this.catalogBrandId = brandId || "";',
+        'this.issueForm.product_id = selectedProductId || "";'
+      )
+      expect(response.body).not_to include(
+        'if (["catalog", "issue"].includes(this.tab)) await this.fetchCatalog();',
+        'return this.catalog.find(p => p.id === Number(this.issueForm.product_id))',
+        'return this.catalog.filter(p => [p.name, p.brand_name, p.currency, p.face_value]'
+      )
+      expect(response.body).to include(
         "matchingAccessClients()", "availableAccessProducts()", "matchingAccessGrants()",
         "openAccessPicker()", "async chooseAccessClient(id)",
         "this.accessPickerOpen = false",
@@ -127,6 +152,13 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'this.issueForm = { product_id: "", key: "", with_pin: false };',
         'if (result) {', 'await this.scrollToIssueResult()'
       )
+      expect(response.body).to include(
+        'cardPinFilter: "", cardQuery: ""',
+        'if (this.cardQuery.trim()) q.set("q", this.cardQuery.trim());',
+        'await this.go("cards");', 'this.cardDetail = card;',
+        'this.cards = [];', 'this.cardQuery = "";'
+      )
+      expect(response.body).not_to include('this.cards = [result.payload.data];')
       expect(response.body).to include(
         "cardPinFilter: ", "toggleCardPinFilter(mode)", "clearCardFilters()",
         'q.set("has_pin", this.cardPinFilter === "with" ? "true" : "false")'
@@ -155,6 +187,7 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include(".card-pin-options", ".card-pin-badge", ".card-filter-bar")
       expect(response.body).to include(".card-pin-reveal-form .pin-reveal-error")
       expect(response.body).to include(".error-modal-overlay", ".console-error-summary")
+      expect(response.body).to include(".card-search-form")
     end
   end
 

@@ -157,3 +157,16 @@ curl -sS 'http://localhost:3000/api/v1/client/cards?page=2&per_page=25&status=ca
 ```
 
 Check `meta.page`, `meta.per_page`, and `meta.total`; verify that page IDs differ. The API accepts `per_page=1..100` (higher values are capped). For the seeded Demo Gift Cards Brand, the nested Admin Products endpoint contains more than 100 Products. The built-in Demo **API Console** can send the same requests without installing curl. Standard directory lists currently show only the first page; they do not yet offer visible pagination controls.
+
+### Search within the authenticated Client's Cards
+
+The optional `q` parameter searches the Card activation number, associated Product name and Brand name (case-insensitive, literal wildcard characters). Search and filters run before pagination and are limited to the current Client's Cards:
+
+```bash
+curl -sS 'http://localhost:3000/api/v1/client/cards?q=latte&page=1&per_page=25' \
+  -H "Authorization: Bearer $CLIENT_TOKEN"
+curl -sS 'http://localhost:3000/api/v1/client/cards?q=gift&status=issued&has_pin=true' \
+  -H "Authorization: Bearer $CLIENT_TOKEN"
+```
+
+Malformed or overly long (`>100` characters) search queries return HTTP 422 with `error.code=invalid_filter`. Normal list/show responses never contain decrypted PIN values. The Demo **My cards** search controls use the same API.

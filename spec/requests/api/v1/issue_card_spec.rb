@@ -118,6 +118,78 @@ RSpec.describe "Client card issuance and safe retries", type: :request do
     expect(Card.count).to eq(2)
   end
 
+  it "searches owned cards by activation, Product and Brand before pagination" do
+    cafe = Brand.create!(name: "Coffee_100% Club")
+    latte = Product.create!(brand: cafe, name: "Morning Latte", face_value: 25, currency: "USD")
+    ProductAccess.create!(client: client, product: latte)
+
+    issue = lambda do |key, issued_product, with_pin|
+      post "/api/v1/client/cards", headers: headers.merge("Idempotency-Key" => key),
+        params: { product_id: issued_product.id, with_pin: with_pin }, as: :json
+      expect(response).to have_http_status(:created)
+      response.parsed_body.fetch("data")
+    end
+    first = issue.call("card-search-1", product, false)
+    second = issue.call("card-search-2", product, false)
+    latte_card = issue.call("card-search-3", latte, true)
+    post "/api/v1/client/cards/#{latte_card.fetch('id')}/cancel", headers: headers
+    expect(response).to have_http_status(:ok)
+
+    other = User.create!(email: "private-card@example.test", password: "private-password",
+      role: :client, payout_rate: 75)
+    ProductAccess.create!(client: other, product: latte)
+    post "/api/v1/client/cards", headers: {
+      "Authorization" => "Bearer #{Auth::TokenEncoder.call(other)}",
+      "Idempotency-Key" => "other-private-card"
+    }, params: { product_id: latte.id, with_pin: false }, as: :json
+    expect(response).to have_http_status(:created)
+    private_card = response.parsed_body.fetch("data")
+
+    get "/api/v1/client/cards", headers: headers,
+      params: { q: first.fetch("activation_number")[3, 9] }
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ first.fetch("id") ])
+
+    get "/api/v1/client/cards", headers: headers, params: { q: "lAtTe" }
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ latte_card.fetch("id") ])
+    expect(response.body).not_to include(private_card.fetch("activation_number"))
+
+    get "/api/v1/client/cards", headers: headers, params: { q: "coffee_100%" }
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ latte_card.fetch("id") ])
+
+    # SQL LIKE wildcard characters must be literal, not match-all operators.
+    get "/api/v1/client/cards", headers: headers, params: { q: "_" }
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ latte_card.fetch("id") ])
+    get "/api/v1/client/cards", headers: headers, params: { q: "%" }
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ latte_card.fetch("id") ])
+
+    get "/api/v1/client/cards", headers: headers,
+      params: { q: "GIFt", per_page: 1, page: 1 }
+    expect(response.parsed_body.dig("meta", "total")).to eq(2)
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ second.fetch("id") ])
+    get "/api/v1/client/cards", headers: headers,
+      params: { q: "GIFT", per_page: 1, page: 2 }
+    expect(response.parsed_body.dig("meta", "total")).to eq(2)
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ first.fetch("id") ])
+
+    get "/api/v1/client/cards", headers: headers,
+      params: { q: "coffee", status: "cancelled", has_pin: "true" }
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ latte_card.fetch("id") ])
+    expect(response.body).not_to include('"pin"', latte_card.fetch("pin"))
+    get "/api/v1/client/cards", headers: headers,
+      params: { q: "coffee", status: "issued" }
+    expect(response.parsed_body.dig("meta", "total")).to eq(0)
+  end
+
+  it "rejects malformed or excessively long Card search parameters" do
+    get "/api/v1/client/cards?q[]=Gift", headers: headers
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body.dig("error", "code")).to eq("invalid_filter")
+    get "/api/v1/client/cards", headers: headers, params: { q: "x" * 101 }
+    expect(response).to have_http_status(:unprocessable_content)
+    expect(response.parsed_body.dig("error", "code")).to eq("invalid_filter")
+  end
+
   it "filters current client's cards by PIN presence before pagination without disclosing the PIN" do
     issue = lambda do |key, with_pin|
       post "/api/v1/client/cards", headers: headers.merge("Idempotency-Key" => key),
