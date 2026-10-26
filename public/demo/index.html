@@ -277,27 +277,27 @@
             </div>
             <div v-else class="access-empty">No Clients match this email search. Try a different term or clear the search.</div>
             <p v-if="matchingAccessClients.length>8" class="access-more-results">Showing the first 8 matches. Refine your email search to find other Clients.</p>
-            <p class="access-search-scope">Searches the first 100 Clients loaded in this workspace.</p>
+            <p class="access-search-scope">Searches all Clients loaded in this workspace.</p>
           </div>
           <div v-if="!clientId" class="access-hint" role="status">Use Find a Client above, then select an account from the matching results.</div>
           <div v-else-if="accessClient" class="access-client-context">
             <div class="access-client-avatar" aria-hidden="true">{{accessClient.email.slice(0,1).toUpperCase()}}</div>
             <div class="access-client-details"><strong>{{accessClient.email}}</strong><span>Client #{{accessClient.id}} · Payout {{accessClient.payout_rate}}%</span></div>
             <span :class="['pill',accessClient.active?'active':'inactive']">{{accessClient.active?'Active':'Disabled'}}</span>
-            <a class="entity-link" :href="entityHref('clients',accessClient.id)" @click.prevent="navigateTo('clients',accessClient.id)">View Client →</a>
+            <a class="entity-link" :href="entityHref('clients',accessClient.id)" @click.prevent="openAccessDetails('clients',accessClient.id)">View Client details</a>
           </div>
           <p v-if="accessClient && !accessClient.active" class="access-caution">This Client is disabled. Permissions can be managed, but the account cannot issue cards until reactivated.</p>
         </div>
 
         <template v-if="clientId && accessClient">
           <div class="access-overview" aria-live="polite">
-            <div class="access-stat"><span>Granted products</span><strong>{{grants.length}}</strong><small>Across all brands</small></div>
-            <div class="access-stat"><span>Available to add</span><strong>{{availableAccessProducts.length}}</strong><small>Within selected brand and search</small></div>
+            <div class="access-stat"><span>Granted products</span><strong>{{accessGrantsReady?grants.length:'—'}}</strong><small>Across all brands</small></div>
+            <div class="access-stat"><span>Available to add</span><strong>{{accessGrantsReady&&accessProductsReady?availableAccessProducts.length:'—'}}</strong><small>Within selected brand and search</small></div>
             <div class="access-stat access-stat-tip"><strong>How it works</strong><small>Grant to allow future issuance. Revoke to block new issuance; existing cards are preserved.</small></div>
           </div>
           <div class="access-columns">
             <div class="panel access-panel">
-              <div class="access-panel-heading"><div><span class="kicker">STEP 02 · ADD PERMISSIONS</span><h2>Available products <em>{{availableAccessProducts.length}}</em></h2></div><span class="access-panel-symbol" aria-hidden="true">+</span></div>
+              <div class="access-panel-heading"><div><span class="kicker">STEP 02 · ADD PERMISSIONS</span><h2>Available products <em>{{accessGrantsReady&&accessProductsReady?availableAccessProducts.length:'—'}}</em></h2></div><span class="access-panel-symbol" aria-hidden="true">+</span></div>
               <p class="muted">Browse one Brand at a time. Products already granted to this Client are removed from this list.</p>
               <div class="access-filters">
                 <label for="access-brand-filter">Brand
@@ -308,37 +308,39 @@
               </div>
               <div :class="['access-list',{'is-loading':loadingTable}]" aria-label="Available products">
                 <div v-for="p in availableAccessProducts" :key="p.id" class="access-item">
-                  <div class="access-item-copy"><div class="access-item-top"><span class="access-product-glyph" aria-hidden="true">◇</span><a class="entity-link access-item-title" :href="entityHref('products',p.id)" @click.prevent="navigateTo('products',p.id)">{{p.name}}</a></div>
-                    <span class="access-item-meta">{{brandName(p.brand_id)}} · {{money(p.face_value,p.currency)}}</span>
+                  <div class="access-item-copy"><div class="access-item-top"><span class="access-product-glyph" aria-hidden="true">◇</span><a class="entity-link access-item-title" :href="entityHref('products',p.id)" @click.prevent="openAccessDetails('products',p.id)">{{p.name}}</a></div>
+                    <span class="access-item-meta"><a class="entity-link" :href="entityHref('brands',p.brand_id)" @click.prevent="openAccessDetails('brands',p.brand_id)">{{brandName(p.brand_id)}}</a> · {{money(p.face_value,p.currency)}}</span>
                     <span v-if="p.state!=='active'||brands.find(b=>b.id===p.brand_id)?.state!=='active'" class="access-warning">Inactive Product or Brand · issuance is unavailable</span>
                   </div>
                   <button type="button" :class="['btn','primary','small',{processing:submitting}]" :disabled="busy" :aria-label="'Grant access to '+p.name" @click="grantAccess(p)">+ Grant</button>
                 </div>
                 <div v-if="!brandId" class="access-empty">Choose a Brand to browse its products.</div>
+                <div v-else-if="!accessGrantsReady||!accessProductsReady" class="access-empty">The complete Product or Grant list is unavailable. Use Refresh to retry before granting access.</div>
                 <div v-else-if="!availableAccessProducts.length" class="access-empty">No products to add. Try another Brand, clear your search, or review the granted products.</div>
               </div>
             </div>
 
             <div class="panel access-panel">
-              <div class="access-panel-heading"><div><span class="kicker">STEP 03 · REVIEW PERMISSIONS</span><h2>Granted products <em>{{grants.length}}</em></h2></div><span class="access-panel-symbol checked" aria-hidden="true">✓</span></div>
+              <div class="access-panel-heading"><div><span class="kicker">STEP 03 · REVIEW PERMISSIONS</span><h2>Granted products <em>{{accessGrantsReady?grants.length:'—'}}</em></h2></div><span class="access-panel-symbol checked" aria-hidden="true">✓</span></div>
               <p class="muted">All products currently assigned to this Client, across every Brand. Revoke an individual permission when needed.</p>
               <label for="access-grant-search" class="access-grant-filter">Search granted products
                 <input id="access-grant-search" type="search" v-model.trim="accessGrantQuery" placeholder="Search product, brand or currency" autocomplete="off"></label>
               <div :class="['access-list',{'is-loading':loadingTable}]" aria-label="Granted products">
                 <div v-for="g in matchingAccessGrants" :key="g.id" class="access-item">
                   <div class="access-item-copy"><div class="access-item-top"><span class="access-granted-icon" aria-hidden="true">✓</span>
-                    <a class="entity-link access-item-title" :href="entityHref('products',g.product_id)" @click.prevent="navigateTo('products',g.product_id)">{{g.product_name}}</a></div>
-                    <span class="access-item-meta"><a class="entity-link" :href="entityHref('brands',g.brand_id)" @click.prevent="navigateTo('brands',g.brand_id)">{{g.brand_name}}</a> · {{money(g.product_face_value,g.product_currency)}}</span>
-                    <span class="access-item-note">Granted to <a class="entity-link" :href="entityHref('clients',g.client_id)" @click.prevent="navigateTo('clients',g.client_id)">{{g.client_email}}</a></span>
+                    <a class="entity-link access-item-title" :href="entityHref('products',g.product_id)" @click.prevent="openAccessDetails('products',g.product_id)">{{g.product_name}}</a></div>
+                    <span class="access-item-meta"><a class="entity-link" :href="entityHref('brands',g.brand_id)" @click.prevent="openAccessDetails('brands',g.brand_id)">{{g.brand_name}}</a> · {{money(g.product_face_value,g.product_currency)}}</span>
+                    <span class="access-item-note">Granted to <a class="entity-link" :href="entityHref('clients',g.client_id)" @click.prevent="openAccessDetails('clients',g.client_id)">{{g.client_email}}</a></span>
                   </div>
                   <button type="button" class="btn outline small access-revoke" :disabled="busy" :aria-label="'Revoke access to '+g.product_name" @click="revokeAccess(g)">Revoke</button>
                 </div>
-                <div v-if="!grants.length" class="access-empty">No products have been granted to this Client yet. Choose a Brand and grant one on the left.</div>
+                <div v-if="!accessGrantsReady" class="access-empty">The complete Grant list is unavailable. Use Refresh to retry.</div>
+                <div v-else-if="!grants.length" class="access-empty">No products have been granted to this Client yet. Choose a Brand and grant one on the left.</div>
                 <div v-else-if="!matchingAccessGrants.length" class="access-empty">No granted products match your search.</div>
               </div>
             </div>
           </div>
-          <p class="access-footer-note">Showing up to 100 Clients, Products per Brand, and Grants per Client. Use Refresh to retrieve updates from another session; the API Console supports additional pages.</p>
+          <p class="access-footer-note">All Clients, Products for the selected Brand, and grants for the selected Client are loaded automatically (up to 100 records per API page). Use Refresh to retrieve updates from another session.</p>
         </template>
       </section>
 
@@ -806,7 +808,7 @@
             <dt>Product ID</dt><dd>#{{directoryModalRecord.id}}</dd>
             <dt>Name</dt><dd><strong>{{directoryModalRecord.name}}</strong></dd>
             <dt>Brand</dt><dd><a class="entity-link" :href="entityHref('brands',directoryModalRecord.brand_id)"
-              @click.prevent="navigateTo('brands',directoryModalRecord.brand_id)">{{brandName(directoryModalRecord.brand_id)}}</a>
+              @click.prevent="tab==='grants' ? openAccessDetails('brands',directoryModalRecord.brand_id) : navigateTo('brands',directoryModalRecord.brand_id)">{{brandName(directoryModalRecord.brand_id)}}</a>
               <small class="directory-detail-subtle">#{{directoryModalRecord.brand_id}}</small></dd>
             <dt>Face value</dt><dd>{{reportMoney(directoryModalRecord.face_value,directoryModalRecord.currency)}}</dd>
             <dt>Currency</dt><dd><span class="report-currency-badge">{{directoryModalRecord.currency}}</span></dd>

@@ -31,8 +31,8 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         "g.product_name", "g.client_email", "c.product_name", "c.brand_name"
       )
       expect(response.body).to include(
-        "navigateTo('products',g.product_id)", "navigateTo('brands',g.brand_id)",
-        "navigateTo('clients',g.client_id)", "navigateTo('catalog-brand',p.brand_id)",
+        "openAccessDetails('products',g.product_id)", "openAccessDetails('brands',g.brand_id)",
+        "openAccessDetails('clients',g.client_id)", "navigateTo('catalog-brand',p.brand_id)",
         "navigateTo('issue-product',p.id)", "inspect('cards',c.id)",
         'class="loading-notice"', 'class="loading-icon"'
       )
@@ -43,7 +43,7 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'v-model.trim="accessProductQuery"', 'v-model.trim="accessGrantQuery"',
         'v-for="p in availableAccessProducts"', 'v-for="g in matchingAccessGrants"',
         '@click="grantAccess(p)"', '@click="revokeAccess(g)"',
-        "navigateTo('clients',accessClient.id)"
+        "openAccessDetails('clients',accessClient.id)"
       )
       expect(response.body).to include(
         'class="audit-filters"', 'v-model="auditOutcome"', 'v-model="auditFrom"',
@@ -171,6 +171,97 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         "validationErrors.length", "entry.message", "client-email-error",
         "fieldError('email')", "clearFieldError('email')"
       )
+    end
+
+    it "keeps Product access entity details in read-only modals" do
+      get "/demo/index.html"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        "openAccessDetails('clients',accessClient.id)",
+        "openAccessDetails('products',p.id)",
+        "openAccessDetails('brands',p.brand_id)",
+        "openAccessDetails('products',g.product_id)",
+        "openAccessDetails('brands',g.brand_id)",
+        "openAccessDetails('clients',g.client_id)"
+      )
+      expect(response.body).to include(
+        "tab==='grants' ? openAccessDetails('brands',directoryModalRecord.brand_id)",
+        'class="directory-detail-dialog"'
+      )
+
+      get "/demo/app.js"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        "async openAccessDetails(kind, rawId)",
+        'this.tab !== "grants"',
+        'this.directoryModalRecord = record',
+        'await this.openDirectoryModal(kind, record)'
+      )
+    end
+
+    it "loads complete Product access permissions across every API page" do
+      get "/demo/app.js"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        "async fetchFullAdminDirectory(resource)",
+        'page: "1", per_page: "100"',
+        "Math.ceil(total / 100)",
+        "records.length !== total",
+        "new Set(records.map(item => item.id)).size !== total",
+        'this.accessGrantsLoadedClientId = null;',
+        'this.accessProductsLoadedBrandId = null;',
+        '"brands/" + encodeURIComponent(brandId) + "/products"',
+        '"clients/" + encodeURIComponent(clientId) + "/product_accesses"',
+        "this.accessGrantsLoadedClientId = clientId;",
+        "this.accessProductsLoadedBrandId = brandId;",
+        "accessGrantsReady()", "accessProductsReady()"
+      )
+      expect(response.body).not_to include(
+        '"admin/clients/" + encodeURIComponent(this.clientId) + "/product_accesses?per_page=100"'
+      )
+
+      get "/demo/index.html"
+      expect(response).to have_http_status(:ok)
+      expect(response.body.dup.force_encoding(Encoding::UTF_8)).to include(
+        "accessGrantsReady?grants.length:'—'",
+        "accessGrantsReady&&accessProductsReady?availableAccessProducts.length:'—'",
+        "The complete Product or Grant list is unavailable.",
+        "The complete Grant list is unavailable.",
+        "All Clients, Products for the selected Brand"
+      )
+    end
+
+    it "starts each Product access visit with empty STEP 02 filters" do
+      get "/demo/app.js"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        'if (section === "grants") {',
+        'this.brandId = "";',
+        'this.accessProductQuery = "";',
+        'this.products = [];',
+        'this.accessProductsLoadedBrandId = null;',
+        'this.brandId = this.tab === "grants" ? "" : (this.brands[0]?.id || "");'
+      )
+      expect(response.body).to include(
+        'if (section === "grants" && !preserveGrantClient && this.tab !== section) {',
+        'this.accessPickerOpen = false;'
+      )
+    end
+
+    it "scrolls to a failed Grant error and avoids unnecessary Product access spacing" do
+      get "/demo/app.js"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        "async grantAccess(product)",
+        "const outcome = await this.execute(async () => {",
+        "if (outcome === null) {",
+        "this.scrollToTop();"
+      )
+
+      get "/demo/style.css"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include("scrollbar-gutter:auto;padding:2px 0 3px")
+      expect(response.body).not_to match(/\.access-list\{[^}]*scrollbar-gutter:stable/)
     end
 
     it "exposes the no-build frontend JavaScript and CSS" do
