@@ -518,13 +518,17 @@
                 <span> · {{session.user.role==='admin'?(reportGroup==='by_brand'?'By brand':'By client'):(reportClientGroup==='brand'?'By brand':'By currency')}}</span></p></div>
           </div>
           <div v-if="reportVisibleRows.length" :class="['scroll','report-table-scroll',{'is-loading':loadingTable}]">
-            <table class="report-table"><thead><tr>
-              <th v-if="session.user.role==='admin'||reportClientGroup==='brand'" scope="col">{{session.user.role==='admin'&&reportGroup==='by_client'?'Client':'Brand'}}</th>
-              <th scope="col">Currency</th><th scope="col">Issued</th><th scope="col">Cancelled</th>
-              <th scope="col">Net face value</th><th scope="col">Net payout</th><th scope="col">Breakdown</th>
+            <table :class="['report-table', {'report-table--grouped': session.user.role==='admin'||reportClientGroup==='brand'}]"><thead><tr>
+              <th v-if="session.user.role==='admin'||reportClientGroup==='brand'" class="report-col-group" scope="col">{{session.user.role==='admin'&&reportGroup==='by_client'?'Client':'Brand'}}</th>
+              <th scope="col" class="report-col-currency">Currency</th>
+              <th scope="col" class="report-col-count">Issued</th>
+              <th scope="col" class="report-col-count">Cancelled</th>
+              <th scope="col" class="report-col-money">Net face value</th>
+              <th scope="col" class="report-col-money">Net payout</th>
+              <th scope="col" class="report-col-breakdown">Breakdown</th>
             </tr></thead><tbody>
               <tr v-for="(record,index) in reportVisibleRows" :key="(session.user.role==='admin'?(reportGroup==='by_brand'?record.brand_id:record.client_id):(reportClientGroup==='brand'?record.brand_id:'own'))+'-'+record.currency+'-'+index">
-                <td v-if="session.user.role==='admin'||reportClientGroup==='brand'">
+                <td v-if="session.user.role==='admin'||reportClientGroup==='brand'" class="report-col-group">
                   <template v-if="session.user.role==='admin'">
                     <a v-if="reportGroup==='by_brand'" class="entity-link" :href="entityHref('brands',record.brand_id)"
                       @click.prevent="navigateTo('brands',record.brand_id)">{{reportGroupLabel(record)}}</a>
@@ -533,12 +537,12 @@
                   </template>
                   <strong v-else>{{reportGroupLabel(record)}}</strong>
                 </td>
-                <td><strong class="report-table-currency">{{record.currency}}</strong></td>
-                <td class="report-numeric">{{reportInteger(record.issued_count)}}</td>
-                <td class="report-numeric">{{reportInteger(record.cancelled_count)}}</td>
-                <td class="report-numeric report-net">{{reportMoney(record.net_spending,record.currency)}}</td>
-                <td class="report-numeric report-net">{{reportMoney(record.net_payout_activity,record.currency)}}</td>
-                <td><details class="report-breakdown"><summary>View figures</summary><dl>
+                <td class="report-col-currency"><strong class="report-table-currency">{{record.currency}}</strong></td>
+                <td class="report-col-count report-numeric">{{reportInteger(record.issued_count)}}</td>
+                <td class="report-col-count report-numeric">{{reportInteger(record.cancelled_count)}}</td>
+                <td class="report-col-money report-numeric report-net">{{reportMoney(record.net_spending,record.currency)}}</td>
+                <td class="report-col-money report-numeric report-net">{{reportMoney(record.net_payout_activity,record.currency)}}</td>
+                <td class="report-col-breakdown"><details class="report-breakdown"><summary>View figures</summary><dl>
                   <dt>Issued face value</dt><dd>{{reportMoney(record.issued_face_value,record.currency)}}</dd>
                   <dt>Cancelled face value</dt><dd>{{reportMoney(record.cancelled_face_value,record.currency)}}</dd>
                   <dt>Issued payout</dt><dd>{{reportMoney(record.issued_payout,record.currency)}}</dd>
