@@ -91,7 +91,11 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'v-model="reportGroup"', 'value="by_brand"', 'value="by_client"',
         'v-model="reportClientGroup"', 'id="report-client-group"',
         'value="currency"', 'value="brand"',
-        'Personal spending', 'id="report-currency"'
+        'Personal spending', 'id="report-currency"',
+        "openReportCards(record,'issued')", "openReportCards(record,'cancelled')",
+        'class="report-drilldown-overlay"', 'role="dialog"',
+        'aria-labelledby="report-drilldown-title"',
+        'class="report-drilldown-table"', 'class="report-drilldown-pages"'
       )
       expect(response.body).to include(
         'class="card-modal-overlay"', 'class="card-detail-modal"',
@@ -151,7 +155,10 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'reportCurrencySummaries()', 'reportVisibleRows()',
         'chooseReportPreset(preset)', 'reportCents(value)',
         'reportFormattedCents(cents, currency)', 'reportClientGroup: "currency"',
-        'q.set("group_by", this.reportClientGroup)'
+        'q.set("group_by", this.reportClientGroup)',
+        'async openReportCards(row, event)', 'async loadReportDrilldown()',
+        'async changeReportDrilldownPage(page)', 'closeReportDrilldown(restoreFocus = true)',
+        'this.closeReportDrilldown(false);'
       )
       expect(response.body).to include(
         "const collections = { brands: this.brands, clients: this.clients, products: this.products }",

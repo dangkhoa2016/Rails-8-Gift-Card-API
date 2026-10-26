@@ -63,6 +63,10 @@
         reportData: null,
         reportPreset: "all", reportCurrencyFilter: "all",
         reportAppliedFrom: "", reportAppliedTo: "",
+        reportDrilldownOpen: false, reportDrilldownTrigger: null,
+        reportDrilldownOverflow: "", reportDrilldownSelection: null,
+        reportDrilldownRows: [], reportDrilldownPage: 1,
+        reportDrilldownPerPage: 10, reportDrilldownTotal: 0,
         auditAction: "", auditActor: "", auditOutcome: "", auditFrom: "", auditTo: "",
         consoleForm: { method: "GET", path: "/api/v1/client/catalog", body: "", key: "" },
         response: { method: "", path: "", body: { message: "Send a request to inspect the response." }, status: null, duration: "—" }
@@ -91,6 +95,16 @@
       cardVisiblePages() {
         const first = Math.max(1, Math.min(this.cardPage - 2, this.cardPageCount - 4));
         return Array.from({ length: Math.min(5, this.cardPageCount) }, (_, i) => first + i);
+      },
+      reportDrilldownPageCount() {
+        return Math.max(1, Math.ceil(this.reportDrilldownTotal / this.reportDrilldownPerPage));
+      },
+      reportDrilldownFirst() {
+        return this.reportDrilldownTotal
+          ? (this.reportDrilldownPage - 1) * this.reportDrilldownPerPage + 1 : 0;
+      },
+      reportDrilldownLast() {
+        return Math.min(this.reportDrilldownPage * this.reportDrilldownPerPage, this.reportDrilldownTotal);
       },
       reportRows() { return Array.isArray(this.reportData?.data) ? this.reportData.data : []; },
       reportCurrencies() {
@@ -614,6 +628,7 @@
         }
       },
       clearSession() {
+        this.closeReportDrilldown(false);
         this.closeCardDetails(false);
         this.hideCardPin();
         this.hideIssuedPin();
@@ -678,6 +693,7 @@
       },
       async go(section, { preserveGrantClient = false, brandId = null, selectedProductId = null } = {}) {
         if (this.busy || !this.menu.some(item => item.id === section)) return;
+        this.closeReportDrilldown(false);
         this.closeCardDetails(false);
         this.hideCardPin();
         if (section !== "issue") this.forgetIssuedPin();
@@ -813,6 +829,96 @@
           else this.cardDetail = null;
         }
         return res;
+      },
+      async openReportCards(row, event) {
+        if (this.busy || !this.session || this.tab !== "reports" ||
+            !["issued", "cancelled"].includes(event) || Number(row[event + "_count"]) <= 0) return;
+        const isAdmin = this.session.user.role === "admin";
+        const grouped = isAdmin ? this.reportGroup === "by_brand" : this.reportClientGroup === "brand";
+        this.reportDrilldownSelection = {
+          currency: row.currency, event, expected: Number(row[event + "_count"]),
+          from: this.reportAppliedFrom, to: this.reportAppliedTo,
+          groupBy: isAdmin ? (grouped ? "brand" : "client") : (grouped ? "brand" : "currency"),
+          groupId: grouped ? row.brand_id : (isAdmin ? row.client_id : null),
+          groupLabel: grouped || isAdmin ? this.reportGroupLabel(row) : "My cards"
+        };
+        this.reportDrilldownTrigger = document.activeElement;
+        this.reportDrilldownOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        this.reportDrilldownRows = [];
+        this.reportDrilldownTotal = 0;
+        this.reportDrilldownPage = 1;
+        this.reportDrilldownOpen = true;
+        await this.$nextTick();
+        this.$refs.reportDrilldownHeading?.focus({ preventScroll: true });
+        await this.loadReportDrilldown();
+      },
+      async loadReportDrilldown() {
+        const selection = this.reportDrilldownSelection;
+        if (!selection || !this.reportDrilldownOpen) return false;
+        const result = await this.execute(() => {
+          const q = new URLSearchParams({
+            currency: selection.currency, event: selection.event,
+            page: String(this.reportDrilldownPage),
+            per_page: String(this.reportDrilldownPerPage)
+          });
+          if (selection.from) q.set("from", selection.from);
+          if (selection.to) q.set("to", selection.to);
+          const isAdmin = this.session.user.role === "admin";
+          if (isAdmin) {
+            q.set("group_by", selection.groupBy);
+            q.set(selection.groupBy === "brand" ? "brand_id" : "client_id", String(selection.groupId));
+          } else if (selection.groupBy === "brand") {
+            q.set("brand_id", String(selection.groupId));
+          }
+          return this.request("GET", apiRoot + (isAdmin ? "admin" : "client") +
+            "/reports/cards?" + q);
+        }, null, "table");
+        if (!result) {
+          this.closeReportDrilldown(false);
+          return false;
+        }
+        this.reportDrilldownRows = result.payload.data || [];
+        this.reportDrilldownTotal = Number(result.payload.meta?.total) || 0;
+        return true;
+      },
+      async changeReportDrilldownPage(page) {
+        if (this.busy || !Number.isSafeInteger(page) || page < 1 ||
+            page > this.reportDrilldownPageCount || page === this.reportDrilldownPage) return;
+        this.reportDrilldownPage = page;
+        if (await this.loadReportDrilldown()) {
+          await this.$nextTick();
+          if (this.$refs.reportDrilldownBody) this.$refs.reportDrilldownBody.scrollTop = 0;
+        }
+      },
+      closeReportDrilldown(restoreFocus = true) {
+        if (!this.reportDrilldownOpen) return;
+        this.reportDrilldownOpen = false;
+        this.reportDrilldownRows = [];
+        this.reportDrilldownSelection = null;
+        document.body.style.overflow = this.reportDrilldownOverflow;
+        const trigger = this.reportDrilldownTrigger;
+        this.reportDrilldownTrigger = null;
+        this.reportDrilldownOverflow = "";
+        if (restoreFocus) this.$nextTick(() => {
+          const target = trigger?.isConnected ? trigger : document.querySelector(".nav-link.selected");
+          target?.focus({ preventScroll: true });
+        });
+      },
+      trapReportDrilldownFocus(event) {
+        const modal = this.$refs.reportDrilldownDialog;
+        if (!modal) return;
+        const elements = [...modal.querySelectorAll(
+          'button:not([disabled]), a[href], [tabindex]:not([tabindex="-1"])'
+        )].filter(el => el.getClientRects().length);
+        if (!elements.length) return;
+        const first = elements[0], last = elements[elements.length - 1];
+        if (event.shiftKey && (document.activeElement === first ||
+            document.activeElement === this.$refs.reportDrilldownHeading)) {
+          event.preventDefault(); last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault(); first.focus();
+        }
       },
       async fetchReport() {
         const q = new URLSearchParams();

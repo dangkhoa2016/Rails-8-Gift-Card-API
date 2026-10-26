@@ -15,6 +15,7 @@ Rails.application.routes.draw do
         get "audit_logs", to: "audit_logs#index"
         get "reports/by_brand", to: "reports#by_brand"
         get "reports/by_client", to: "reports#by_client"
+        get "reports/cards", to: "reports#cards"
         resources :clients, only: [ :index, :show, :create, :update ] do
           resources :product_accesses, only: [ :index, :create, :destroy ]
         end
@@ -22,6 +23,7 @@ Rails.application.routes.draw do
       namespace :client do
         get "catalog", to: "catalog#index"
         get "reports/spending", to: "reports#spending"
+        get "reports/cards", to: "reports#cards"
         resources :cards, only: [ :index, :show, :create ] do
           post :cancel, on: :member
           post :reveal_pin, on: :member
