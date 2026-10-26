@@ -38,7 +38,9 @@ For meaningful financial grouping, the seed adds 15 Cards distributed across fiv
 5. In **My cards**, inspect Product/Brand, face value and status; click **View** or the activation number to open a focused modal showing that Card without fetching again when cached. Close with X, Close, Escape or backdrop to return to the same list position; the modal shows the Card status. Cancel an issued card and verify the cancellation in personal spending.
 6. Return to Admin, refresh Reports and Audit logs, and verify corresponding events.
 
-The API console supports GET, POST, PATCH and DELETE for same-origin /api/v1/ endpoints only. It sends JSON objects, accepts an optional Idempotency-Key header, and displays HTTP status, duration and raw JSON. See API_EXAMPLES.md for example requests.
+The API console supports GET, POST, PATCH and DELETE for same-origin /api/v1/ endpoints only. It sends JSON objects, accepts an optional Idempotency-Key header, and displays HTTP status, duration and raw JSON.
+
+**Role-aware request templates:** In API console, a **Request template** dropdown lists real endpoints for the signed-in role, organized into **Read-only examples** and **Write operations**. Selecting an example automatically fills Method, Endpoint and (when applicable) a sample JSON body / unique issuance Idempotency-Key; selecting does **not** send any request. The default when entering the console is a safe role-appropriate GET (GET /api/v1/admin/brands for Admin; GET /api/v1/client/catalog for Client). Choose **Custom request** or edit Method/Endpoint for manual control. Endpoints with :brand_id, :client_id, :product_id or :card_id, and JSON fields containing REPLACE_WITH_..., require real values from previous GET responses. The form visibly explains this and disables Send until placeholders are replaced. Write templates are marked as modifying real data, and Rails still enforces authentication, ownership, authorization, validation and idempotency. No Admin examples appear for a Client, and all requests remain same-origin. See API_EXAMPLES.md for curl examples.
 
 ## Financial reports: traceable Card drill-down
 
