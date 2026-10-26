@@ -19,7 +19,8 @@ Rails.application.configure do
   config.public_file_server.headers = { "cache-control" => "public, max-age=3600" }
 
   # Show full error reports.
-  config.consider_all_requests_local = true
+  # Test the same safe API JSON exceptions flow used by the public demo.
+  config.consider_all_requests_local = false
   config.cache_store = :null_store
 
   # Render exception templates for rescuable exceptions and raise for other exceptions.
