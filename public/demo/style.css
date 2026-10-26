@@ -314,3 +314,10 @@ nav.card-pagination{display:flex;flex-direction:row;align-items:center;justify-c
 .card-modal-footer{display:flex;justify-content:flex-end;flex:none;padding:13px 25px 18px;border-top:1px solid #e7edf7;background:#fff}
 .card-modal-close:focus-visible,.card-modal-footer button:focus-visible{outline:2px solid #3983e9;outline-offset:2px}
 @media(max-width:710px){.card-modal-overlay{padding:9px}.card-detail-modal{max-height:95vh;max-height:95dvh;border-radius:12px}.card-modal-header{padding:17px}.card-modal-content{padding:16px 17px}.card-modal-footer{padding:12px 17px}.card-detail-modal .record-details dl{grid-template-columns:1fr;gap:4px}.card-detail-modal .record-details dd{margin:0 0 10px}}
+
+/* Server-side sortable Card headers: entire label is a keyboard-accessible button. */
+.card-sort-button{display:inline-flex;align-items:center;justify-content:flex-start;gap:7px;width:100%;min-height:24px;background:transparent;border:0;padding:0;color:inherit;text-transform:inherit;letter-spacing:inherit;font-size:inherit;font-weight:inherit;text-align:left;white-space:nowrap}
+.card-sort-button:hover:not(:disabled){color:#2d63d9}
+.card-sort-button:focus-visible{outline:2px solid #3983e9;outline-offset:3px;border-radius:3px}
+.card-sort-icon{font-size:14px;line-height:1;font-weight:800;color:#7e94b4}
+th[aria-sort="ascending"] .card-sort-icon,th[aria-sort="descending"] .card-sort-icon{color:#2d63d9}

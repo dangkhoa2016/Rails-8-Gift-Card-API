@@ -181,6 +181,111 @@ RSpec.describe "Client card issuance and safe retries", type: :request do
     expect(response.parsed_body.dig("meta", "total")).to eq(0)
   end
 
+  it "sorts owned Cards globally before pagination using only approved columns" do
+    first_brand = Brand.create!(name: "Alpha Brand")
+    second_brand = Brand.create!(name: "Zeta Brand")
+    apple = Product.create!(brand: first_brand, name: "apple", face_value: 25, currency: "USD")
+    another_apple = Product.create!(brand: second_brand, name: "Apple",
+      face_value: 40, currency: "EUR")
+    [ apple, another_apple ].each { |entry| ProductAccess.create!(client: client, product: entry) }
+
+    issue = lambda do |key, item, with_pin, activation|
+      post "/api/v1/client/cards", headers: headers.merge("Idempotency-Key" => key),
+        params: { product_id: item.id, with_pin: with_pin }, as: :json
+      expect(response).to have_http_status(:created)
+      Card.find(response.parsed_body.dig("data", "id")).tap do |card|
+        card.update!(activation_number: activation)
+      end
+    end
+
+    gift_pin = issue.call("sort-gift-pin", product, true, "7100000000000001")
+    alpha = issue.call("sort-alpha", apple, false, "7100000000000003")
+    zeta = issue.call("sort-zeta", another_apple, true, "7100000000000002")
+    client.update!(payout_rate: 80)
+    gift_plain = issue.call("sort-gift-plain", product, false, "7100000000000004")
+    post "/api/v1/client/cards/#{zeta.id}/cancel", headers: headers
+    expect(response).to have_http_status(:ok)
+
+    cases = {
+      "activation_number" => [ gift_pin, zeta, alpha, gift_plain ],
+      "product" => [ alpha, zeta, gift_plain, gift_pin ],
+      "face_value" => [ alpha, zeta, gift_plain, gift_pin ],
+      "payout" => [ alpha, zeta, gift_plain, gift_pin ],
+      "status" => [ zeta, gift_plain, alpha, gift_pin ],
+      "has_pin" => [ gift_plain, alpha, zeta, gift_pin ]
+    }
+    # Tie-breakers stay ID DESC in both directions, rather than reversing ties.
+    descending = {
+      "activation_number" => [ gift_plain, alpha, zeta, gift_pin ],
+      "product" => [ gift_plain, gift_pin, zeta, alpha ],
+      "face_value" => [ gift_plain, gift_pin, zeta, alpha ],
+      "payout" => [ gift_pin, gift_plain, zeta, alpha ],
+      "status" => [ gift_plain, alpha, gift_pin, zeta ],
+      "has_pin" => [ zeta, gift_pin, gift_plain, alpha ]
+    }
+    cases.each do |sort_by, expected|
+      get "/api/v1/client/cards", headers: headers, params: { sort_by: sort_by, sort_dir: "asc" }
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.dig("meta", "total")).to eq(4)
+      expect(response.parsed_body.fetch("data").pluck("id")).to eq(expected.pluck(:id)), sort_by
+      expect(response.body).not_to include('"pin"')
+
+      get "/api/v1/client/cards", headers: headers,
+        params: { sort_by: sort_by, sort_dir: "desc", per_page: 2, page: 1 }
+      expect(response).to have_http_status(:ok)
+      expect(response.parsed_body.fetch("data").pluck("id")).to eq(descending.fetch(sort_by).first(2).pluck(:id)),
+        "#{sort_by} descending page 1"
+    end
+
+    get "/api/v1/client/cards", headers: headers
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq(
+      [ gift_plain.id, zeta.id, alpha.id, gift_pin.id ]) # Backward-compatible default
+
+    get "/api/v1/client/cards", headers: headers,
+      params: { q: "aPpLe", sort_by: "product", sort_dir: "asc", per_page: 1, page: 1 }
+    expect(response.parsed_body.dig("meta", "total")).to eq(2)
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ alpha.id ])
+    get "/api/v1/client/cards", headers: headers,
+      params: { q: "aPpLe", sort_by: "product", sort_dir: "asc", per_page: 1, page: 2 }
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ zeta.id ])
+
+    get "/api/v1/client/cards", headers: headers,
+      params: { status: "cancelled", has_pin: "true", sort_by: "activation_number", sort_dir: "asc" }
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ zeta.id ])
+
+    other = User.create!(email: "other-sort@example.test", password: "other-sort-password",
+      role: :client, payout_rate: 88)
+    ProductAccess.create!(client: other, product: apple)
+    post "/api/v1/client/cards",
+      headers: { "Authorization" => "Bearer #{Auth::TokenEncoder.call(other)}",
+        "Idempotency-Key" => "other-sort-card" },
+      params: { product_id: apple.id, with_pin: false }, as: :json
+    expect(response).to have_http_status(:created)
+    other_id = response.parsed_body.dig("data", "id")
+    get "/api/v1/client/cards", headers: headers,
+      params: { sort_by: "product", sort_dir: "asc" }
+    expect(response.parsed_body.fetch("data").pluck("id")).not_to include(other_id)
+    expect(response.parsed_body.dig("meta", "total")).to eq(4)
+  end
+
+  it "rejects unsupported Card sort keys and directions without interpolating SQL" do
+    [
+      { sort_by: "created_at;DROP TABLE cards", sort_dir: "asc" },
+      { sort_by: "activation_number", sort_dir: "sideways" },
+      { sort_by: "product", sort_dir: "DESC;DROP TABLE cards" },
+      { sort_by: "pin", sort_dir: "asc" },
+      { sort_dir: "desc" }
+    ].each do |params|
+      get "/api/v1/client/cards", headers: headers, params: params
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body.dig("error", "code")).to eq("invalid_filter")
+    end
+    get "/api/v1/client/cards?sort_by[]=status", headers: headers
+    expect(response).to have_http_status(:unprocessable_content)
+    get "/api/v1/client/cards?sort_by=status&sort_dir[]=asc", headers: headers
+    expect(response).to have_http_status(:unprocessable_content)
+  end
+
   it "rejects malformed or excessively long Card search parameters" do
     get "/api/v1/client/cards?q[]=Gift", headers: headers
     expect(response).to have_http_status(:unprocessable_content)

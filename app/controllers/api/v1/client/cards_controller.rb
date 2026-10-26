@@ -4,9 +4,18 @@ module Api
       class CardsController < BaseController
         PIN_REVEAL_FAILURE_LIMIT = 5
         PIN_REVEAL_WINDOW = 15.minutes
+        # SQL expressions are fixed and never sourced from an incoming parameter.
+        CARD_SORT_COLUMNS = {
+          "activation_number" => [ "cards.activation_number" ],
+          "product" => [ "LOWER(products.name)", "LOWER(brands.name)" ],
+          "face_value" => [ "cards.face_value_snapshot", "cards.currency_snapshot" ],
+          "payout" => [ "cards.payout_amount_snapshot", "cards.currency_snapshot" ],
+          "status" => [ "cards.status" ],
+          "has_pin" => [ "(cards.pin IS NOT NULL)" ]
+        }.freeze
 
         def index
-          scope = current_user.cards.includes(product: :brand).order(id: :desc)
+          scope = current_user.cards.includes(product: :brand)
           if request.query_parameters.key?("q")
             query = request.query_parameters["q"]
             unless query.is_a?(String) && query.length <= 100
@@ -35,6 +44,24 @@ module Api
                 message: "has_pin must be true or false." } }, status: :unprocessable_content
             end
           end
+          sort_by = request.query_parameters["sort_by"]
+          sort_dir = request.query_parameters["sort_dir"]
+          if sort_by.nil? && sort_dir.nil?
+            # Preserve the previously accepted newest-ID-first default.
+            scope = scope.order(id: :desc)
+          else
+            unless sort_by.is_a?(String) && CARD_SORT_COLUMNS.key?(sort_by) &&
+                (sort_dir.nil? || %w[asc desc].include?(sort_dir))
+              return render json: { error: { code: "invalid_filter",
+                message: "Unsupported Card sort column or direction." } },
+                status: :unprocessable_content
+            end
+            direction = (sort_dir || "asc").upcase
+            scope = scope.joins(product: :brand) if sort_by == "product"
+            order = CARD_SORT_COLUMNS.fetch(sort_by).map { |column| "#{column} #{direction}" }
+            scope = scope.reorder(Arel.sql((order + [ "cards.id DESC" ]).join(", ")))
+          end
+
           page = [ params.fetch(:page, 1).to_i, 1 ].max
           per_page = params.fetch(:per_page, 25).to_i.clamp(1, 100)
           total = scope.count

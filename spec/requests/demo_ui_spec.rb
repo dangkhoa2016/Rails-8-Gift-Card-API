@@ -68,9 +68,17 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         '@submit.prevent="loadCards"', 'class="card-search-form"',
         "Search card, Product or Brand", 'id="card-per-page"',
         'v-model.number="cardPerPage"', 'class="card-pagination"',
-        'changeCardPage(cardPage-1)', 'changeCardPage(cardPage+1)',
+        'changeCardPage(1)', 'changeCardPage(cardPage-1)',
+        'changeCardPage(cardPage+1)', 'changeCardPage(cardPageCount)',
         'ref="cardsListTop"', 'v-for="p in cardVisiblePages"',
         'cardFirst}}', 'cardLast}}', 'of {{cardTotal}} matching cards'
+      )
+      expect(response.body).to include(
+        "changeCardSort('activation_number')", "changeCardSort('product')",
+        "changeCardSort('face_value')", "changeCardSort('payout')",
+        "changeCardSort('status')", "changeCardSort('has_pin')",
+        'class="card-sort-button"', ':aria-sort="cardSortAria(',
+        "cardSortLabel('product','Product / Brand')"
       )
       expect(response.body).to include(
         'class="card-modal-overlay"', 'class="card-detail-modal"',
@@ -118,8 +126,10 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include("loadingTable: false", "submitting: false")
       expect(response.body).to include(
         'cardPage: 1, cardPerPage: 25, cardTotal: 0',
+        'cardSortBy: "", cardSortDir: "asc"',
         'cardPageCount()', 'cardVisiblePages()', 'async changeCardPage(nextPage)',
         'this.$refs.cardsListTop?.scrollIntoView(', 'async changeCardPerPage()',
+        'async changeCardSort(column)', 'cardSortAria(column)', 'cardSortIcon(column)',
         'this.cardPage = 1;',
         'this.cardTotal = Number(res.payload.meta?.total) || 0;'
       )
@@ -204,6 +214,7 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include(".card-pin-reveal-form .pin-reveal-error")
       expect(response.body).to include(".error-modal-overlay", ".console-error-summary")
       expect(response.body).to include(".card-search-form", "nav.card-pagination", ".card-modal-overlay", ".card-detail-modal")
+      expect(response.body).to include(".card-sort-button", ".card-sort-icon")
     end
   end
 
