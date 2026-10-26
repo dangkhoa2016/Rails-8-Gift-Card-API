@@ -314,6 +314,12 @@
           behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
         });
       },
+      async scrollToSaveNotice(result) {
+        // Create returns false and Update returns true; only null means failure.
+        if (result === null) return;
+        await this.$nextTick();
+        this.scrollToTop();
+      },
       listVisiblePages(page, count) {
         const first = Math.max(1, Math.min(page - 2, count - 4));
         return Array.from({ length: Math.min(5, count) }, (_, i) => first + i);
@@ -554,6 +560,14 @@
           throw new Error("Custom fields must be a JSON object with at most five keys.");
         return value;
       },
+      async scrollToEditForm(kind) {
+        await this.$nextTick();
+        if (this.tab !== kind) return;
+        this.$refs[kind + "EditForm"]?.scrollIntoView({
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+          block: "start"
+        });
+      },
       resetBrand() {
         this.editingBrandId = null;
         this.brandForm = { name: "", state: "active", custom_fields: "{}" };
@@ -571,17 +585,20 @@
         this.editingBrandId = record.id;
         this.brandForm = { name: record.name, state: record.state,
           custom_fields: this.pretty(record.custom_fields || {}) };
+        this.scrollToEditForm("brands");
       },
       editProduct(record) {
         this.editingProductId = record.id;
         this.productForm = { brand_id: record.brand_id, name: record.name,
           face_value: record.face_value, currency: record.currency, state: record.state,
           custom_fields: this.pretty(record.custom_fields || {}) };
+        this.scrollToEditForm("products");
       },
       editClient(record) {
         this.editingClientId = record.id;
         this.clientForm = { email: record.email, password: "",
           payout_rate: record.payout_rate, active: record.active };
+        this.scrollToEditForm("clients");
       },
       async inspect(kind, id) {
         if (this.busy) return;
@@ -1464,7 +1481,7 @@
           ? "instant" : "smooth", block: "start" });
       },
       async saveBrand() {
-        await this.execute(async () => {
+        const result = await this.execute(async () => {
           const editing = this.editingBrandId !== null;
           const body = { name: this.brandForm.name, state: this.brandForm.state,
             custom_fields: this.parseFields(this.brandForm.custom_fields) };
@@ -1475,6 +1492,7 @@
           this.selectedDetail = null;
           return editing;
         }, editing => editing ? "Brand updated." : "Brand created.");
+        await this.scrollToSaveNotice(result);
       },
       async setBrandState(b) {
         const state = b.state === "active" ? "inactive" : "active";
@@ -1484,7 +1502,7 @@
         }, "Brand updated.");
       },
       async saveProduct() {
-        await this.execute(async () => {
+        const result = await this.execute(async () => {
           const editing = this.editingProductId !== null;
           const body = { name: this.productForm.name, face_value: this.productForm.face_value,
             currency: this.productForm.currency.trim().toUpperCase(), state: this.productForm.state,
@@ -1500,6 +1518,7 @@
           this.selectedDetail = null;
           return editing;
         }, editing => editing ? "Product updated." : "Product created.");
+        await this.scrollToSaveNotice(result);
       },
       async setProductState(p) {
         const state = p.state === "active" ? "inactive" : "active";
@@ -1516,7 +1535,7 @@
         }, "Product soft-deleted.");
       },
       async saveClient() {
-        await this.execute(async () => {
+        const result = await this.execute(async () => {
           const editing = this.editingClientId !== null;
           const body = { email: this.clientForm.email, payout_rate: this.clientForm.payout_rate,
             active: this.clientForm.active };
@@ -1528,6 +1547,7 @@
           this.selectedDetail = null;
           return editing;
         }, editing => editing ? "Client updated." : "Client created.");
+        await this.scrollToSaveNotice(result);
       },
       async setClientState(c) {
         await this.execute(async () => {
