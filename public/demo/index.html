@@ -426,13 +426,138 @@
         <p class="help">Search, Status and PIN filters run on the server before pagination. Selecting a Gift card or View uses the loaded row without reloading the list; an Issue link can show a Card outside the current page.</p>
       </section>
 
-      <section v-if="tab==='reports'" class="panel"><span class="kicker">EVENT-TIME FINANCIAL REPORT</span><h2>{{session.user.role==='admin'?'Administrative reports':'Personal spending'}}</h2><div class="filters">
-        <label>From (UTC)<input type="date" v-model="reportFrom"></label><label>To (exclusive, UTC)<input type="date" v-model="reportTo"></label>
-        <label v-if="session.user.role==='admin'">Group<select v-model="reportGroup"><option value="by_brand">By brand</option><option value="by_client">By client</option></select></label>
-        <button :class="['btn','primary',{processing:submitting}]" @click="loadReport" :disabled="busy">Run report</button></div>
-        <div :class="['scroll',{'is-loading':loadingTable}]" v-if="reportRows.length"><table><thead><tr><th v-for="key in reportKeys">{{key.replaceAll('_',' ')}}</th></tr></thead><tbody><tr v-for="(r,i) in reportRows" :key="i"><td v-for="key in reportKeys"><a v-if="session.user.role==='admin' && key==='brand_id'" class="entity-link" :href="entityHref('brands',r[key])" @click.prevent="navigateTo('brands',r[key])">{{reportValue(r,key)}}</a>
-          <a v-else-if="session.user.role==='admin' && key==='client_id'" class="entity-link" :href="entityHref('clients',r[key])" @click.prevent="navigateTo('clients',r[key])">{{reportValue(r,key)}}</a><span v-else>{{reportValue(r,key)}}</span></td></tr></tbody></table></div><div v-else class="empty">No report rows for this range</div>
-        <details><summary>Raw report JSON</summary><pre class="response-pre">{{pretty(reportData)}}</pre></details>
+      <section v-if="tab==='reports'" class="panel report-workspace">
+        <div class="report-heading">
+          <div>
+            <span class="kicker">EVENT-TIME FINANCIAL ACTIVITY</span>
+            <h2>{{session.user.role==='admin'?'Financial activity reports':'Personal spending'}}</h2>
+            <p class="muted">Automatically calculated from Gift cards issued and cancelled.
+              All amounts use the original currency of the Card. No manual entries or currency conversion.</p>
+          </div>
+          <div class="report-scope" v-if="session.user.role==='admin'">ADMIN REPORT <small>Across clients</small></div>
+          <div class="report-scope" v-else>MY ACTIVITY <small>Your cards only</small></div>
+        </div>
+
+        <div class="report-filter-panel">
+          <div class="report-filter-heading">
+            <strong>Reporting period</strong><span>All dates and events use UTC</span>
+          </div>
+          <div class="report-presets" role="group" aria-label="Quick reporting periods">
+            <button type="button" v-for="preset in [{id:'all',label:'All time'},{id:'month',label:'This month'},{id:'last30',label:'Last 30 days'}]"
+              :key="preset.id" :class="['report-preset',{selected:reportPreset===preset.id}]"
+              :aria-pressed="reportPreset===preset.id" :disabled="busy"
+              @click="chooseReportPreset(preset.id)">{{preset.label}}</button>
+          </div>
+          <form class="report-filter-form" @submit.prevent="loadReport">
+            <label>From date <span class="report-label-note">UTC, inclusive</span>
+              <input id="report-from" type="date" v-model="reportFrom" @change="reportPreset='custom'"
+                :max="reportTo||undefined" :disabled="busy"></label>
+            <label>To date <span class="report-label-note">UTC, exclusive</span>
+              <input id="report-to" type="date" v-model="reportTo" @change="reportPreset='custom'"
+                :min="reportFrom||undefined" :disabled="busy"></label>
+            <label v-if="session.user.role==='admin'">Group report by
+              <select id="report-group" v-model="reportGroup" :disabled="busy">
+                <option value="by_brand">By brand</option><option value="by_client">By client</option>
+              </select></label>
+            <label v-else>Group report by
+              <select id="report-client-group" v-model="reportClientGroup" :disabled="busy" @change="loadReport">
+                <option value="currency">By currency</option>
+                <option value="brand">By brand</option>
+              </select>
+            </label>
+            <button type="submit" class="btn primary" :disabled="busy"
+              :class="{processing:submitting}">Run report</button>
+          </form>
+          <p class="report-date-hint">The end date is excluded. For example, use 2026-10-27 to include every event on 2026-10-26 UTC.</p>
+        </div>
+
+        <template v-if="reportData">
+          <div class="report-results-heading">
+            <div><h3>Report overview</h3><p>{{reportRangeLabel}}</p></div>
+            <label v-if="reportCurrencies.length>1" for="report-currency" class="report-currency-selector">
+              Display currency
+              <select id="report-currency" v-model="reportCurrencyFilter" :disabled="busy">
+                <option value="all">All currencies</option>
+                <option v-for="currency in reportCurrencies" :key="currency" :value="currency">{{currency}}</option>
+              </select>
+            </label>
+          </div>
+          <div class="report-stats" aria-label="Report activity summary">
+            <div class="report-stat"><span>Cards issued</span>
+              <strong>{{reportInteger(reportIssuedCount)}}</strong><small>Issuance events in range</small></div>
+            <div class="report-stat"><span>Cards cancelled</span>
+              <strong>{{reportInteger(reportCancelledCount)}}</strong><small>Cancellation events in range</small></div>
+            <div class="report-stat"><span>Net card events</span>
+              <strong>{{reportInteger(reportIssuedCount-reportCancelledCount)}}</strong>
+              <small>Issues minus cancellations in range</small></div>
+            <div class="report-stat"><span>Currencies</span>
+              <strong>{{reportCurrencySummaries.length}}</strong><small>Shown separately, no FX conversion</small></div>
+          </div>
+
+          <div v-if="reportCurrencySummaries.length" class="report-money-section">
+            <div class="report-section-heading"><h3>Money by currency</h3>
+              <p>Currency amounts are never combined across currencies.</p></div>
+            <div class="report-money-grid">
+              <article v-for="summary in reportCurrencySummaries" :key="summary.currency" class="report-money-card">
+                <span class="report-currency-tag">{{summary.currency}}</span>
+                <div class="report-money-primary"><small>Net face value activity</small>
+                  <strong>{{reportFormattedCents(summary.net,summary.currency)}}</strong></div>
+                <div class="report-money-secondary"><small>Net payout activity</small>
+                  <strong>{{reportFormattedCents(summary.netPayout,summary.currency)}}</strong></div>
+                <div class="report-money-foot">
+                  <span>Issued: {{reportFormattedCents(summary.issued,summary.currency)}}</span>
+                  <span>Cancelled: {{reportFormattedCents(summary.cancelled,summary.currency)}}</span>
+                </div>
+              </article>
+            </div>
+          </div>
+
+          <div class="report-section-heading report-detail-heading">
+            <div><h3>{{session.user.role==='admin'?'Grouped activity details':'Spending details'}}</h3>
+              <p>{{reportVisibleRows.length}} result {{reportVisibleRows.length===1?'row':'rows'}}
+                <span> · {{session.user.role==='admin'?(reportGroup==='by_brand'?'By brand':'By client'):(reportClientGroup==='brand'?'By brand':'By currency')}}</span></p></div>
+          </div>
+          <div v-if="reportVisibleRows.length" :class="['scroll','report-table-scroll',{'is-loading':loadingTable}]">
+            <table class="report-table"><thead><tr>
+              <th v-if="session.user.role==='admin'||reportClientGroup==='brand'" scope="col">{{session.user.role==='admin'&&reportGroup==='by_client'?'Client':'Brand'}}</th>
+              <th scope="col">Currency</th><th scope="col">Issued</th><th scope="col">Cancelled</th>
+              <th scope="col">Net face value</th><th scope="col">Net payout</th><th scope="col">Breakdown</th>
+            </tr></thead><tbody>
+              <tr v-for="(record,index) in reportVisibleRows" :key="(session.user.role==='admin'?(reportGroup==='by_brand'?record.brand_id:record.client_id):(reportClientGroup==='brand'?record.brand_id:'own'))+'-'+record.currency+'-'+index">
+                <td v-if="session.user.role==='admin'||reportClientGroup==='brand'">
+                  <template v-if="session.user.role==='admin'">
+                    <a v-if="reportGroup==='by_brand'" class="entity-link" :href="entityHref('brands',record.brand_id)"
+                      @click.prevent="navigateTo('brands',record.brand_id)">{{reportGroupLabel(record)}}</a>
+                    <a v-else class="entity-link" :href="entityHref('clients',record.client_id)"
+                      @click.prevent="navigateTo('clients',record.client_id)">{{reportGroupLabel(record)}}</a>
+                  </template>
+                  <strong v-else>{{reportGroupLabel(record)}}</strong>
+                </td>
+                <td><strong class="report-table-currency">{{record.currency}}</strong></td>
+                <td class="report-numeric">{{reportInteger(record.issued_count)}}</td>
+                <td class="report-numeric">{{reportInteger(record.cancelled_count)}}</td>
+                <td class="report-numeric report-net">{{reportMoney(record.net_spending,record.currency)}}</td>
+                <td class="report-numeric report-net">{{reportMoney(record.net_payout_activity,record.currency)}}</td>
+                <td><details class="report-breakdown"><summary>View figures</summary><dl>
+                  <dt>Issued face value</dt><dd>{{reportMoney(record.issued_face_value,record.currency)}}</dd>
+                  <dt>Cancelled face value</dt><dd>{{reportMoney(record.cancelled_face_value,record.currency)}}</dd>
+                  <dt>Issued payout</dt><dd>{{reportMoney(record.issued_payout,record.currency)}}</dd>
+                  <dt>Cancelled payout</dt><dd>{{reportMoney(record.cancelled_payout,record.currency)}}</dd>
+                </dl></details></td>
+              </tr>
+            </tbody></table>
+          </div>
+          <div v-else class="report-empty" role="status"><strong>No financial activity for this selection</strong>
+            <p>Try a different date range or select All time to see recorded Gift card activity.</p>
+            <button class="btn outline small" type="button" :disabled="busy" @click="chooseReportPreset('all')">Show all time</button>
+          </div>
+          <details class="report-raw"><summary>API response · raw report JSON</summary>
+            <pre class="response-pre">{{pretty(reportData)}}</pre></details>
+          <p class="report-explainer"><strong>How to read these numbers:</strong>
+            Issued and cancelled activity are recorded at their respective event times.
+            Net payout activity is issued payout minus reversed payout within the selected period,
+            not an outstanding balance as of the end date.</p>
+        </template>
       </section>
 
       <section v-if="tab==='audit'" class="panel audit-workspace">
