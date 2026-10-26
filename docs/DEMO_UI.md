@@ -54,6 +54,10 @@ The UI provides **All time**, **This month** and **Last 30 days** quick periods,
 
 To create new report data, use the existing Client **Issue gift card** and **Cancel** workflows; no report-specific manual input is supported or required. Re-running the demo seed solely to display reports is unnecessary.
 
+## Global Back to top shortcut
+
+The optional demo shows a floating **Top** shortcut at the lower-right of the viewport once the page has been scrolled more than 360 px. It scrolls the document back to the top with smooth motion, or instant motion when the browser prefers reduced motion. The shortcut stays hidden near the top and while any detail/error modal is open, so it does not compete with modal navigation. It works for both Admin and Client, on desktop and mobile. It does not modify application state or call API endpoints.
+
 ## Architecture and security
 
 - Three static files under public/demo/: index.html, app.js and style.css.

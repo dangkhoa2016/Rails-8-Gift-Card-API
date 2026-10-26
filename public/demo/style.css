@@ -429,3 +429,12 @@ th[aria-sort="ascending"] .card-sort-icon,th[aria-sort="descending"] .card-sort-
 nav.report-drilldown-pages{display:flex;flex-direction:row;flex-wrap:wrap;align-items:center;gap:7px}
 .report-drilldown-pages span{font-size:11px;color:#6b7f9b;font-weight:700;margin:0 5px}
 @media(max-width:710px){.report-drilldown-overlay{padding:7px}.report-drilldown-dialog{max-height:97vh;max-height:97dvh}.report-drilldown-header{padding:15px}.report-drilldown-header h2{font-size:18px}.report-drilldown-body{padding:13px}.report-drilldown-footer{padding:12px;justify-content:center}.report-drilldown-footer>.btn{width:100%}nav.report-drilldown-pages{justify-content:center}}
+
+/* Global page-level shortcut. Avoid modal overlays and respect reduced motion. */
+.back-to-top{position:fixed;z-index:980;right:clamp(16px,2.5vw,36px);bottom:calc(22px + env(safe-area-inset-bottom,0px));display:flex;flex-direction:column;align-items:center;justify-content:center;gap:1px;width:55px;height:55px;padding:7px;border:1px solid #1e56ad;border-radius:16px;background:#2d63d9;color:#fff;box-shadow:0 12px 28px #1b3c7655;font-size:10px;font-weight:750;line-height:1.2}
+.back-to-top:hover{background:#1d54c6;transform:translateY(-2px);box-shadow:0 16px 32px #1b3c765e}
+.back-to-top:focus-visible{outline:3px solid #77b4ff;outline-offset:3px}
+.back-to-top-arrow{font-size:25px;line-height:1;font-weight:650}
+.back-to-top-label{letter-spacing:.2px}
+@media(max-width:710px){.back-to-top{right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));width:48px;height:48px;border-radius:14px}.back-to-top-arrow{font-size:23px}}
+@media(prefers-reduced-motion:reduce){.back-to-top:hover{transform:none}}
