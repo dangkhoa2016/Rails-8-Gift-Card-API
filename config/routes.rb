@@ -24,6 +24,7 @@ Rails.application.routes.draw do
         get "reports/spending", to: "reports#spending"
         resources :cards, only: [ :index, :show, :create ] do
           post :cancel, on: :member
+          post :reveal_pin, on: :member
         end
       end
     end

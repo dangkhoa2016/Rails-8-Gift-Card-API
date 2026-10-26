@@ -117,4 +117,58 @@ RSpec.describe "Client card issuance and safe retries", type: :request do
     expect(response.parsed_body.dig("data", "id")).not_to eq(first_id)
     expect(Card.count).to eq(2)
   end
+
+  it "filters current client's cards by PIN presence before pagination without disclosing the PIN" do
+    issue = lambda do |key, with_pin|
+      post "/api/v1/client/cards", headers: headers.merge("Idempotency-Key" => key),
+        params: { product_id: product.id, with_pin: with_pin }, as: :json
+      expect(response).to have_http_status(:created)
+      response.parsed_body.fetch("data")
+    end
+    with_pin = issue.call("pin-filter-with-1", true)
+    without_pin = issue.call("pin-filter-without", false)
+    cancelled_pin = issue.call("pin-filter-with-2", true)
+    post "/api/v1/client/cards/#{cancelled_pin.fetch('id')}/cancel", headers: headers
+    expect(response).to have_http_status(:ok)
+
+    get "/api/v1/client/cards", headers: headers, params: { has_pin: "true", per_page: 1 }
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.dig("meta", "total")).to eq(2)
+    expect(response.parsed_body.fetch("data").length).to eq(1)
+    expect(response.parsed_body.fetch("data").first.fetch("has_pin")).to be(true)
+
+    get "/api/v1/client/cards", headers: headers,
+      params: { has_pin: "true", status: "issued", per_page: 100 }
+    expect(response.parsed_body.dig("meta", "total")).to eq(1)
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ with_pin.fetch("id") ])
+
+    get "/api/v1/client/cards", headers: headers,
+      params: { has_pin: "true", status: "cancelled", per_page: 100 }
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ cancelled_pin.fetch("id") ])
+
+    get "/api/v1/client/cards", headers: headers, params: { has_pin: "false", per_page: 100 }
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.dig("meta", "total")).to eq(1)
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ without_pin.fetch("id") ])
+    expect(response.parsed_body.fetch("data").first.fetch("has_pin")).to be(false)
+
+    get "/api/v1/client/cards", headers: headers, params: { per_page: 100 }
+    expect(response.parsed_body.dig("meta", "total")).to eq(3)
+    expect(response.parsed_body.fetch("data").pluck("has_pin")).to match_array([ true, true, false ])
+    expect(response.body).not_to include('"pin"', with_pin.fetch("pin"))
+
+    get "/api/v1/client/cards/#{with_pin.fetch('id')}", headers: headers
+    expect(response.parsed_body.fetch("data")).to include("has_pin" => true)
+    expect(response.body).not_to include('"pin"', with_pin.fetch("pin"))
+    get "/api/v1/client/cards/#{without_pin.fetch('id')}", headers: headers
+    expect(response.parsed_body.fetch("data")).to include("has_pin" => false)
+
+    [ "yes", "1", "TRUE" ].each do |invalid|
+      get "/api/v1/client/cards", headers: headers, params: { has_pin: invalid }
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body.dig("error", "code")).to eq("invalid_filter")
+    end
+    get "/api/v1/client/cards?has_pin[]=true", headers: headers
+    expect(response).to have_http_status(:unprocessable_content)
+  end
 end
