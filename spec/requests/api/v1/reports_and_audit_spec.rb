@@ -108,4 +108,90 @@ RSpec.describe "SQL activity reporting and filtered audit", type: :request do
     get "/api/v1/admin/audit_logs", headers: client_headers
     expect(response).to have_http_status(:forbidden)
   end
+
+  it "filters audit outcome and UTC half-open day boundaries before pagination" do
+    before_range = AuditEvent.create!(actor: client_a, action: "card.issued", record_type: "Card",
+      outcome: "success", occurred_at: Time.utc(2026, 10, 19, 23, 59, 59))
+    start_of_range = AuditEvent.create!(actor: client_a, action: "card.issued", record_type: "Card",
+      outcome: "success", occurred_at: Time.utc(2026, 10, 20, 0, 0, 0))
+    end_of_range = AuditEvent.create!(actor: client_a, action: "card.issued", record_type: "Card",
+      outcome: "success", occurred_at: Time.utc(2026, 10, 21, 23, 59, 59))
+    refused = AuditEvent.create!(actor: client_a, action: "card.issued", record_type: "Card",
+      outcome: "refused", occurred_at: Time.utc(2026, 10, 21, 10))
+    next_day = AuditEvent.create!(actor: client_a, action: "card.issued", record_type: "Card",
+      outcome: "success", occurred_at: Time.utc(2026, 10, 22, 0, 0, 0))
+
+    get "/api/v1/admin/audit_logs", headers: admin_headers,
+      params: { actor_id: client_a.id, action: "card.issued", outcome: "success",
+        from: "2026-10-20", to: "2026-10-22", per_page: 1 }
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.dig("meta", "total")).to eq(2)
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ end_of_range.id ])
+
+    get "/api/v1/admin/audit_logs", headers: admin_headers,
+      params: { outcome: "success", from: "2026-10-20", to: "2026-10-22", per_page: 50 }
+    expect(response.parsed_body.fetch("data").pluck("id")).to match_array([ start_of_range.id, end_of_range.id ])
+
+    get "/api/v1/admin/audit_logs", headers: admin_headers,
+      params: { outcome: "refused", from: "2026-10-20", to: "2026-10-22" }
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ refused.id ])
+
+    get "/api/v1/admin/audit_logs", headers: admin_headers,
+      params: { outcome: "success", to: "2026-10-20" }
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ before_range.id ])
+    get "/api/v1/admin/audit_logs", headers: admin_headers,
+      params: { outcome: "success", from: "2026-10-22" }
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ next_day.id ])
+  end
+
+  it "rejects invalid audit outcomes and reversed or impossible UTC dates" do
+    [ "other", "SUCCESS" ].each do |invalid_outcome|
+      get "/api/v1/admin/audit_logs", headers: admin_headers, params: { outcome: invalid_outcome }
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body.dig("error", "code")).to eq("invalid_filter")
+    end
+    get "/api/v1/admin/audit_logs?outcome[]=success", headers: admin_headers
+    expect(response).to have_http_status(:unprocessable_content)
+    get "/api/v1/admin/audit_logs", headers: admin_headers,
+      params: { outcome: "success", from: "2026-10-23", to: "2026-10-22" }
+    expect(response).to have_http_status(:unprocessable_content)
+    get "/api/v1/admin/audit_logs", headers: admin_headers, params: { from: "2026-02-30" }
+    expect(response).to have_http_status(:unprocessable_content)
+    get "/api/v1/admin/audit_logs", headers: client_headers, params: { outcome: "refused" }
+    expect(response).to have_http_status(:forbidden)
+  end
+
+  it "selects audit events to the second including microseconds and midnight" do
+    actor = client_a
+    previous = AuditEvent.create!(actor: actor, action: "test.second", record_type: "User",
+      outcome: "success", occurred_at: Time.utc(2026, 10, 20, 10, 15, 29, 999_999))
+    first = AuditEvent.create!(actor: actor, action: "test.second", record_type: "User",
+      outcome: "success", occurred_at: Time.utc(2026, 10, 20, 10, 15, 30))
+    subsecond = AuditEvent.create!(actor: actor, action: "test.second", record_type: "User",
+      outcome: "success", occurred_at: Time.utc(2026, 10, 20, 10, 15, 30, 999_999))
+    next_second = AuditEvent.create!(actor: actor, action: "test.second", record_type: "User",
+      outcome: "success", occurred_at: Time.utc(2026, 10, 20, 10, 15, 31))
+    near_midnight = AuditEvent.create!(actor: actor, action: "test.second", record_type: "User",
+      outcome: "success", occurred_at: Time.utc(2026, 10, 20, 23, 59, 59, 999_999))
+    following_day = AuditEvent.create!(actor: actor, action: "test.second", record_type: "User",
+      outcome: "success", occurred_at: Time.utc(2026, 10, 21, 0, 0, 0))
+
+    get "/api/v1/admin/audit_logs", headers: admin_headers,
+      params: { action: "test.second", outcome: "success",
+        from: "2026-10-20T10:15:30.000Z", to: "2026-10-20T10:15:31.000Z" }
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ subsecond.id, first.id ])
+    expect(response.parsed_body.dig("meta", "total")).to eq(2)
+
+    get "/api/v1/admin/audit_logs", headers: admin_headers,
+      params: { action: "test.second", from: "2026-10-20T23:59:59Z",
+        to: "2026-10-21T00:00:00Z" }
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ near_midnight.id ])
+
+    get "/api/v1/admin/audit_logs", headers: admin_headers,
+      params: { action: "test.second", from: "2026-10-20T10:15:31Z",
+        to: "2026-10-21T00:00:01Z" }
+    expect(response.parsed_body.fetch("data").pluck("id")).to include(next_second.id, following_day.id)
+    expect(response.parsed_body.fetch("data").pluck("id")).not_to include(previous.id, first.id, subsecond.id)
+  end
 end

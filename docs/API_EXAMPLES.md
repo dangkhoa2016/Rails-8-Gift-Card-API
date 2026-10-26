@@ -79,6 +79,23 @@ curl -sS "http://localhost:3000/api/v1/client/reports/spending?from=2026-10-01&t
 
 curl -sS "http://localhost:3000/api/v1/admin/audit_logs?action=card.issued&record_type=Card&page=1&per_page=25" \
   -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# Combined Audit filters: success/refused and a UTC day range (to is EXCLUSIVE).
+# This example covers all of October 20 and October 21, 2026.
+curl -sS -G http://localhost:3000/api/v1/admin/audit_logs \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  --data-urlencode 'outcome=refused' \
+  --data-urlencode 'from=2026-10-20' \
+  --data-urlencode 'to=2026-10-22' \
+  --data-urlencode 'per_page=50'
+
+# To include the UTC second 10:15:30 and all its fractional timestamps,
+# pass an exclusive upper bound of 10:15:31. UI accepts HH:MM:SS,
+# interprets the value as UTC, and performs this one-second conversion.
+curl -sS -G http://localhost:3000/api/v1/admin/audit_logs \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  --data-urlencode 'from=2026-10-20T10:15:30Z' \
+  --data-urlencode 'to=2026-10-20T10:15:31Z'
 ```
 
 These date ranges use UTC and include `from` but exclude `to`. JSON money values are decimal strings. Each report is grouped by currency.

@@ -38,6 +38,12 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         '@click="grantAccess(p)"', '@click="revokeAccess(g)"',
         "navigateTo('clients',accessClient.id)"
       )
+      expect(response.body).to include(
+        'class="audit-filters"', 'v-model="auditOutcome"', 'v-model="auditFrom"',
+        'v-model="auditTo"', '@submit.prevent="loadAudit"', '@click="clearAuditFilters"',
+        'To (UTC, inclusive second)', 'type="datetime-local" step="1"',
+        'value="success"', 'value="refused"'
+      )
       expect(response.body).not_to include('@submit.prevent="grantAccess"', 'id="access-client-select"')
       expect(response.body).to include(
         "validationErrors.length", "entry.message", "client-email-error",
@@ -70,6 +76,11 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         "this.grants = [...this.grants, result.payload.data]",
         "this.grants = this.grants.filter(item => item.id !== g.id)"
       )
+      expect(response.body).to include(
+        "auditOutcome: ", "auditFrom: ", "auditTo: ", "auditUtcInstant(value)",
+        'q.set("outcome", this.auditOutcome)', 'q.set("from", fromAt.toISOString())',
+        'q.set("to", new Date(toAt.getTime() + 1000).toISOString())', "clearAuditFilters()"
+      )
       expect(response.body).not_to include("grantProductId")
       get "/demo/style.css"
       expect(response).to have_http_status(:ok)
@@ -78,6 +89,7 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include(".validation-summary", ".field-error")
       expect(response.body).to include(".access-workspace", ".access-columns", ".access-item")
       expect(response.body).to include(".access-client-results", ".access-client-option")
+      expect(response.body).to include(".audit-filters", ".audit-filter-actions")
     end
   end
 
