@@ -64,6 +64,16 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         "@click=\"inspect('cards',c.id)\""
       )
       expect(response.body).to include(
+        'class="panel brand-catalog-panel"', 'id="brand-catalog-select"',
+        'id="product-per-page"', 'v-model.number="productPerPage"',
+        'ref="productsListTop"', 'productFirst}}', 'productLast}}',
+        'of {{productTotal}} products', 'class="card-pagination product-pagination"',
+        'aria-label="Brand catalog pagination"', 'v-for="p in productVisiblePages"',
+        'changeProductPage(1)', 'changeProductPage(productPage-1)',
+        'changeProductPage(productPage+1)', 'changeProductPage(productPageCount)',
+        'v-if="productCatalogPreview"', 'Browse all Brand products'
+      )
+      expect(response.body).to include(
         'id="card-search"', 'v-model.trim="cardQuery"',
         '@submit.prevent="loadCards"', 'class="card-search-form"',
         "Search card, Product or Brand", 'id="card-per-page"',
@@ -156,6 +166,14 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         "this.rememberApiError(error, method, path);", "lastApiError: null"
       )
       expect(response.body).to include("loadingTable: false", "submitting: false")
+      expect(response.body).to include(
+        'productPage: 1, productPerPage: 25, productTotal: 0',
+        'productCatalogPreview: false', 'productPageCount()', 'productVisiblePages()',
+        'productFirst()', 'productLast()', 'async changeProductPage(nextPage)',
+        'async changeProductPerPage()', 'async scrollToProductsList()',
+        'this.tab === "products"', 'const perPage = catalog ? this.productPerPage : 100',
+        'this.productTotal = total;', 'this.productCatalogPreview = false;'
+      )
       expect(response.body).to include(
         'id: "admin-brands"', 'id: "admin-report-brand"',
         'id: "admin-audit"', 'id: "admin-create-brand"',
@@ -275,6 +293,7 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include(".card-search-form", "nav.card-pagination", ".card-modal-overlay", ".card-detail-modal")
       expect(response.body).to include(".card-sort-button", ".card-sort-icon")
       expect(response.body).to include(".back-to-top", ".back-to-top:focus-visible")
+      expect(response.body).to include(".product-pagination-summary", ".product-preview-notice")
       expect(response.body).to include(".console-template-box", ".console-template-kind",
         ".console-placeholder-warning", ".console-write-warning", ".console-method-path")
       expect(response.body).to include(".report-workspace", ".report-filter-form",

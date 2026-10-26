@@ -115,9 +115,26 @@
               <button v-if="editingProductId" class="btn outline" type="button" @click="resetProduct">Cancel edit</button></div>
           </form>
         </div>
-        <div class="panel"><span class="kicker">BRAND CATALOG</span><h2>Products <em>{{products.length}}</em></h2>
-          <label>Browse products for brand<select v-model="brandId" @change="loadProducts"><option value="" disabled>Select brand</option>
-            <option v-for="b in brands" :key="b.id" :value="b.id">{{b.name}}</option></select></label>
+        <div class="panel brand-catalog-panel"><span class="kicker">BRAND CATALOG</span><h2>Products <em>{{productCatalogPreview?'Preview':productTotal}}</em></h2>
+          <label for="brand-catalog-select">Browse products for brand
+            <select id="brand-catalog-select" v-model="brandId" @change="loadProducts" :disabled="busy">
+              <option value="" disabled>Select brand</option>
+              <option v-for="b in brands" :key="b.id" :value="b.id">{{b.name}}</option>
+            </select>
+          </label>
+          <div v-if="productCatalogPreview" class="product-preview-notice">
+            <p>Showing the selected Product only, not the complete Brand catalog.</p>
+            <button type="button" class="btn outline small" :disabled="busy" @click="loadProducts">Browse all Brand products</button>
+          </div>
+          <div v-else class="card-pagination-summary product-pagination-summary" ref="productsListTop">
+            <p role="status" aria-live="polite">Showing {{productFirst}}–{{productLast}} of {{productTotal}} products</p>
+            <label for="product-per-page">Products per page
+              <select id="product-per-page" v-model.number="productPerPage" @change="changeProductPerPage" :disabled="busy">
+                <option :value="10">10</option><option :value="25">25</option>
+                <option :value="50">50</option><option :value="100">100</option>
+              </select>
+            </label>
+          </div>
           <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>Product</th><th>Brand</th><th>Value</th><th>State</th><th>Actions</th></tr></thead><tbody>
           <tr v-for="p in products" :key="p.id"><td><a class="entity-link" :href="entityHref('products',p.id)" @click.prevent="navigateTo('products',p.id)">{{p.name}}</a><small>Product ID: {{p.id}}</small></td>
             <td><a class="entity-link" :href="entityHref('brands',p.brand_id)" @click.prevent="navigateTo('brands',p.brand_id)">{{brandName(p.brand_id)}}</a></td><td>{{money(p.face_value,p.currency)}}</td>
@@ -128,6 +145,25 @@
               <button class="text-btn dangerous" :disabled="busy||!!p.deleted_at" @click="removeProduct(p)">Delete</button></div></td></tr>
           <tr v-if="!products.length"><td class="empty" colspan="5">No products for selected brand</td></tr>
           </tbody></table></div>
+          <nav v-if="!productCatalogPreview && productTotal>0" class="card-pagination product-pagination"
+               aria-label="Brand catalog pagination">
+            <button type="button" class="btn outline small" :disabled="busy||productPage===1"
+              @click="changeProductPage(1)">« First</button>
+            <button type="button" class="btn outline small" :disabled="busy||productPage===1"
+              @click="changeProductPage(productPage-1)">← Previous</button>
+            <div class="card-pages">
+              <button v-for="p in productVisiblePages" :key="p" type="button"
+                :class="['card-page-button',{current:p===productPage}]"
+                :aria-current="p===productPage?'page':undefined"
+                :aria-label="'Product page '+p" :disabled="busy||p===productPage"
+                @click="changeProductPage(p)">{{p}}</button>
+            </div>
+            <span class="card-page-count">Page {{productPage}} of {{productPageCount}}</span>
+            <button type="button" class="btn outline small" :disabled="busy||productPage===productPageCount"
+              @click="changeProductPage(productPage+1)">Next →</button>
+            <button type="button" class="btn outline small" :disabled="busy||productPage===productPageCount"
+              @click="changeProductPage(productPageCount)">Last »</button>
+          </nav>
           <div v-if="selectedDetail?.kind==='products'" class="record-details"><h3>Product details</h3><dl>
             <dt>Name</dt><dd>{{selectedDetail.data.name}}</dd><dt>Brand</dt><dd><a class="entity-link" :href="entityHref('brands',selectedDetail.data.brand_id)" @click.prevent="navigateTo('brands',selectedDetail.data.brand_id)">{{brandName(selectedDetail.data.brand_id)}}</a></dd>
             <dt>Face value</dt><dd>{{money(selectedDetail.data.face_value,selectedDetail.data.currency)}}</dd>
