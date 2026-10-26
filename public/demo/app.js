@@ -141,6 +141,8 @@
         brands: [], products: [], clients: [], grants: [], catalog: [], issueCatalog: [], cards: [], audits: [],
         brandId: "", clientId: "", cardStatus: "", cardPinFilter: "", cardQuery: "",
         cardPage: 1, cardPerPage: 25, cardTotal: 0, cardSortBy: "", cardSortDir: "asc",
+        productPage: 1, productPerPage: 25, productTotal: 0,
+        productCatalogPreview: false,
         accessClientQuery: "", accessPickerOpen: false, accessProductQuery: "", accessGrantQuery: "",
         editingBrandId: null, editingProductId: null, editingClientId: null,
         selectedDetail: null, cardDetail: null, cardModalOpen: false, cardModalTrigger: null,
@@ -198,6 +200,13 @@
         const q = this.issueProductQuery.trim().toLowerCase();
         return this.issueCatalog.filter(p => [p.name, p.brand_name, p.currency, p.face_value]
           .some(value => String(value || "").toLowerCase().includes(q)));
+      },
+      productPageCount() { return Math.max(1, Math.ceil(this.productTotal / this.productPerPage)); },
+      productFirst() { return this.productTotal ? (this.productPage - 1) * this.productPerPage + 1 : 0; },
+      productLast() { return Math.min(this.productPage * this.productPerPage, this.productTotal); },
+      productVisiblePages() {
+        const first = Math.max(1, Math.min(this.productPage - 2, this.productPageCount - 4));
+        return Array.from({ length: Math.min(5, this.productPageCount) }, (_, i) => first + i);
       },
       cardPageCount() { return Math.max(1, Math.ceil(this.cardTotal / this.cardPerPage)); },
       cardFirst() { return this.cardTotal ? (this.cardPage - 1) * this.cardPerPage + 1 : 0; },
@@ -371,7 +380,17 @@
             if (kind === "products") this.products = [record];
             else collections[kind].push(record);
           }
-          if (kind === "products") this.brandId = record.brand_id;
+          if (kind === "products") {
+            this.brandId = record.brand_id;
+            // An off-page Product deep link is a single-record preview, not a
+            // complete Brand catalog. Retain the one-detail-GET behavior.
+            if (this.tab !== "products") {
+              this.products = [record];
+              this.productCatalogPreview = true;
+              this.productPage = 1;
+              this.productTotal = 1;
+            }
+          }
           this.tab = kind;
           this.selectedDetail = { kind, data: record };
           this.cardDetail = null;
@@ -782,6 +801,8 @@
         this.cardStatus = ""; this.cardPinFilter = ""; this.cardQuery = "";
         this.cardPage = 1; this.cardPerPage = 25; this.cardTotal = 0;
         this.cardSortBy = ""; this.cardSortDir = "asc";
+        this.productPage = 1; this.productPerPage = 25; this.productTotal = 0;
+        this.productCatalogPreview = false;
         this.loginForm.email = "";
         this.loginForm.password = "";
         this.consoleForm = { method: "GET", path: "/api/v1/client/catalog", body: "", key: "" };
@@ -836,6 +857,12 @@
           // Sidebar opens a clean chooser; Catalog product links supply only an ID.
           this.issueProductQuery = "";
           this.issueForm.product_id = selectedProductId || "";
+        }
+        if (section === "products" && this.tab !== section) {
+          // A new Products visit starts on the first page of the chosen Brand.
+          this.productPage = 1;
+          this.productTotal = 0;
+          this.productCatalogPreview = false;
         }
         if (section === "cards") {
           // Each My cards visit starts unfiltered, even when opened via a Card link.
@@ -902,10 +929,31 @@
           this.productForm.brand_id = this.brands[0]?.id || "";
       },
       async fetchProducts() {
-        this.products = [];
-        if (!this.brandId) return;
-        const res = await this.request("GET", apiRoot + "admin/brands/" + encodeURIComponent(this.brandId) + "/products?per_page=100");
+        if (!this.brandId) {
+          this.products = [];
+          if (this.tab === "products") this.productTotal = 0;
+          return;
+        }
+        // Product Access keeps its existing independent 100-record loader.
+        // Only Brand Catalog uses this dedicated server-side pagination state.
+        const catalog = this.tab === "products";
+        const perPage = catalog ? this.productPerPage : 100;
+        const page = catalog ? this.productPage : 1;
+        const q = new URLSearchParams({ page: String(page), per_page: String(perPage) });
+        const url = apiRoot + "admin/brands/" + encodeURIComponent(this.brandId) + "/products?" + q;
+        const res = await this.request("GET", url);
+        const total = Number(res.payload.meta?.total) || 0;
+        if (catalog && page > 1 && page > Math.max(1, Math.ceil(total / perPage))) {
+          // Concurrent Product changes can shrink the last page.
+          this.productPage = Math.max(1, Math.ceil(total / perPage));
+          return this.fetchProducts();
+        }
         this.products = res.payload.data || [];
+        if (catalog) {
+          this.productTotal = total;
+          this.productCatalogPreview = false;
+        }
+        return res;
       },
       async fetchClients() {
         const res = await this.request("GET", apiRoot + "admin/clients?per_page=100");
@@ -1097,9 +1145,35 @@
         this.audits = res.payload.data || [];
       },
       async loadProducts() {
+        if (this.busy) return;
         if (this.editingProductId !== null && Number(this.productForm.brand_id) !== Number(this.brandId))
           this.resetProduct();
         this.selectedDetail = null;
+        this.productPage = 1;
+        await this.execute(() => this.fetchProducts(), null, "table");
+      },
+      async scrollToProductsList() {
+        await this.$nextTick();
+        this.$refs.productsListTop?.scrollIntoView({
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+          block: "start"
+        });
+      },
+      async changeProductPage(nextPage) {
+        if (this.busy || this.productCatalogPreview || !Number.isSafeInteger(nextPage) ||
+            nextPage < 1 || nextPage > this.productPageCount || nextPage === this.productPage) return;
+        const previous = this.productPage;
+        this.productPage = nextPage;
+        const result = await this.execute(() => this.fetchProducts(), null, "table");
+        if (!result) {
+          this.productPage = previous;
+          return;
+        }
+        await this.scrollToProductsList();
+      },
+      async changeProductPerPage() {
+        if (this.busy || this.productCatalogPreview) return;
+        this.productPage = 1;
         await this.execute(() => this.fetchProducts(), null, "table");
       },
       openAccessPicker() {
@@ -1243,6 +1317,7 @@
           await this.request(editing ? "PATCH" : "POST",
             apiRoot + (editing ? "admin/products/" + this.editingProductId :
               "admin/brands/" + brandId + "/products"), body);
+          if (Number(this.brandId) !== Number(brandId)) this.productPage = 1;
           this.brandId = brandId;
           this.resetProduct();
           await this.fetchProducts();
