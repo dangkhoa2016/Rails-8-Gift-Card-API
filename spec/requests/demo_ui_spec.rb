@@ -98,6 +98,16 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'class="report-drilldown-table"', 'class="report-drilldown-pages"'
       )
       expect(response.body).to include(
+        'id="console-template"', 'v-model="consoleTemplateId"',
+        '@change="applyConsoleTemplate(consoleTemplateId)"',
+        'v-for="group in consoleTemplateGroups"',
+        'v-for="example in group.items"',
+        'id="console-method"', 'id="console-endpoint"',
+        '@change="setConsoleCustom"', '@input="setConsoleCustom"',
+        'class="console-placeholder-warning"', 'class="console-write-warning"',
+        ':disabled="busy||consoleHasPlaceholders"'
+      )
+      expect(response.body).to include(
         'class="back-to-top"', 'aria-label="Scroll to top"',
         'v-show="showBackToTop && !cardModalOpen && !reportDrilldownOpen && !errorModalOpen"',
         '@click="scrollToTop"'
@@ -146,6 +156,16 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         "this.rememberApiError(error, method, path);", "lastApiError: null"
       )
       expect(response.body).to include("loadingTable: false", "submitting: false")
+      expect(response.body).to include(
+        'id: "admin-brands"', 'id: "admin-report-brand"',
+        'id: "admin-audit"', 'id: "admin-create-brand"',
+        'id: "client-catalog"', 'id: "client-cards"',
+        'id: "client-spending"', 'id: "client-issue"',
+        'consoleTemplateGroups()', 'selectedConsoleTemplate()',
+        'consoleHasPlaceholders()', 'applyConsoleTemplate(id)',
+        'setConsoleCustom()', 'this.consoleTemplateId = "";',
+        'this.session.user.role === "admin" ? "admin-brands" : "client-catalog"'
+      )
       expect(response.body).to include(
         "showBackToTop: false", 'mounted() {',
         'window.addEventListener("scroll", this.updateBackToTop, { passive: true });',
@@ -255,6 +275,8 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include(".card-search-form", "nav.card-pagination", ".card-modal-overlay", ".card-detail-modal")
       expect(response.body).to include(".card-sort-button", ".card-sort-icon")
       expect(response.body).to include(".back-to-top", ".back-to-top:focus-visible")
+      expect(response.body).to include(".console-template-box", ".console-template-kind",
+        ".console-placeholder-warning", ".console-write-warning", ".console-method-path")
       expect(response.body).to include(".report-workspace", ".report-filter-form",
         ".report-money-grid", ".report-money-card", ".report-stats",
         ".report-table--grouped th.report-col-group",

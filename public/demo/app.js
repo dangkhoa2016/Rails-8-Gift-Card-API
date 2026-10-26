@@ -36,6 +36,99 @@
     { id: "reports", icon: "↗", text: "Spending" }
   ];
 
+  // Only real Rails routes. Role-specific examples are discoverable without
+  // exposing protected Admin endpoints or submitting an HTTP request.
+  const consoleTemplateCatalog = {
+    admin: [
+      { id: "admin-brands", group: "read", label: "List brands",
+        method: "GET", path: "/api/v1/admin/brands?page=1&per_page=25",
+        note: "Browse Brands with server-side pagination." },
+      { id: "admin-brand", group: "read", label: "Show a brand by ID",
+        method: "GET", path: "/api/v1/admin/brands/:brand_id",
+        note: "Replace :brand_id with a real ID from List brands." },
+      { id: "admin-products", group: "read", label: "List products for a brand",
+        method: "GET", path: "/api/v1/admin/brands/:brand_id/products?page=1&per_page=25",
+        note: "Replace :brand_id with an existing Brand ID." },
+      { id: "admin-product", group: "read", label: "Show a product by ID",
+        method: "GET", path: "/api/v1/admin/products/:product_id",
+        note: "Replace :product_id with a real Product ID." },
+      { id: "admin-clients", group: "read", label: "List client accounts",
+        method: "GET", path: "/api/v1/admin/clients?page=1&per_page=25",
+        note: "List Clients and their IDs without changing data." },
+      { id: "admin-client", group: "read", label: "Show a client by ID",
+        method: "GET", path: "/api/v1/admin/clients/:client_id",
+        note: "Replace :client_id with a real Client ID." },
+      { id: "admin-grants", group: "read", label: "List a client's product access",
+        method: "GET", path: "/api/v1/admin/clients/:client_id/product_accesses?page=1&per_page=25",
+        note: "Replace :client_id to inspect that Client's granted Products." },
+      { id: "admin-report-brand", group: "read", label: "Financial report · By brand",
+        method: "GET", path: "/api/v1/admin/reports/by_brand",
+        note: "Financial activity by Brand and original currency; optional from/to UTC dates." },
+      { id: "admin-report-client", group: "read", label: "Financial report · By client",
+        method: "GET", path: "/api/v1/admin/reports/by_client",
+        note: "Financial activity by Client and original currency." },
+      { id: "admin-report-cards", group: "read", label: "Report evidence · Issued Cards by brand",
+        method: "GET", path: "/api/v1/admin/reports/cards?group_by=brand&brand_id=:brand_id&currency=USD&event=issued&page=1&per_page=10",
+        note: "Replace :brand_id; event-time Card list is read-only and paginated." },
+      { id: "admin-audit", group: "read", label: "Audit log · Recent activity",
+        method: "GET", path: "/api/v1/admin/audit_logs?page=1&per_page=25",
+        note: "Inspect audit history, newest first." },
+      { id: "admin-create-brand", group: "write", label: "Create a brand",
+        method: "POST", path: "/api/v1/admin/brands",
+        body: { name: "REPLACE_WITH_UNIQUE_BRAND_NAME", state: "active" },
+        note: "Creates a real Brand and a new audit event. Replace the sample name." },
+      { id: "admin-update-brand", group: "write", label: "Update a brand",
+        method: "PATCH", path: "/api/v1/admin/brands/:brand_id",
+        body: { state: "inactive" },
+        note: "Changes the state of a real Brand. Replace :brand_id." },
+      { id: "admin-create-product", group: "write", label: "Create a product under a brand",
+        method: "POST", path: "/api/v1/admin/brands/:brand_id/products",
+        body: { name: "Reviewer Sample Gift Card", face_value: "100.00", currency: "USD" },
+        note: "Creates a real Product. Replace :brand_id first." },
+      { id: "admin-grant-access", group: "write", label: "Grant a product to a client",
+        method: "POST", path: "/api/v1/admin/clients/:client_id/product_accesses",
+        body: { product_id: "REPLACE_WITH_PRODUCT_ID" },
+        note: "Creates an access grant. Replace the Client and Product IDs first." },
+      { id: "admin-soft-delete", group: "write", label: "Soft-delete a product",
+        method: "DELETE", path: "/api/v1/admin/products/:product_id",
+        note: "Changes the Product to inactive/deleted. Replace :product_id carefully." }
+    ],
+    client: [
+      { id: "client-catalog", group: "read", label: "List eligible products · Catalog",
+        method: "GET", path: "/api/v1/client/catalog",
+        note: "Start here to discover eligible Product IDs for issuing Cards." },
+      { id: "client-catalog-filter", group: "read", label: "Catalog · USD products",
+        method: "GET", path: "/api/v1/client/catalog?currency=USD",
+        note: "Filter the Client's eligible Catalog by currency." },
+      { id: "client-cards", group: "read", label: "List my cards · Paginated",
+        method: "GET", path: "/api/v1/client/cards?page=1&per_page=25",
+        note: "See your own Cards, including IDs for detail requests." },
+      { id: "client-cards-filter", group: "read", label: "My cards · Issued with PIN",
+        method: "GET", path: "/api/v1/client/cards?status=issued&has_pin=true&per_page=25",
+        note: "Filters Card metadata only; no PIN is returned." },
+      { id: "client-card", group: "read", label: "Show one of my cards",
+        method: "GET", path: "/api/v1/client/cards/:card_id",
+        note: "Replace :card_id with an ID from List my cards; ownership is enforced." },
+      { id: "client-spending", group: "read", label: "Personal spending · By currency",
+        method: "GET", path: "/api/v1/client/reports/spending",
+        note: "Your own issuance and cancellation activity grouped by currency." },
+      { id: "client-spending-brand", group: "read", label: "Personal spending · By brand",
+        method: "GET", path: "/api/v1/client/reports/spending?group_by=brand",
+        note: "Group your Card events by Brand without seeing other Clients." },
+      { id: "client-report-cards", group: "read", label: "Report evidence · EUR issued Cards",
+        method: "GET", path: "/api/v1/client/reports/cards?currency=EUR&event=issued&page=1&per_page=10",
+        note: "Read-only event-time Cards behind the EUR issuance count." },
+      { id: "client-issue", group: "write", label: "Issue a gift card",
+        method: "POST", path: "/api/v1/client/cards",
+        body: { product_id: "REPLACE_WITH_ELIGIBLE_PRODUCT_ID", with_pin: false },
+        uniqueKey: true,
+        note: "Issues a real Card. Use an eligible Product ID from Catalog and the generated Idempotency-Key." },
+      { id: "client-cancel", group: "write", label: "Cancel one of my cards",
+        method: "POST", path: "/api/v1/client/cards/:card_id/cancel",
+        note: "Cancels a real issued Card. Replace :card_id with your own Card ID." }
+    ]
+  };
+
   const app = window.Vue.createApp({
     data() {
       return {
@@ -69,6 +162,7 @@
         reportDrilldownRows: [], reportDrilldownPage: 1,
         reportDrilldownPerPage: 10, reportDrilldownTotal: 0,
         auditAction: "", auditActor: "", auditOutcome: "", auditFrom: "", auditTo: "",
+        consoleTemplateId: "",
         consoleForm: { method: "GET", path: "/api/v1/client/catalog", body: "", key: "" },
         response: { method: "", path: "", body: { message: "Send a request to inspect the response." }, status: null, duration: "—" }
       };
@@ -79,6 +173,21 @@
         return [{ id: "overview", icon: "⌂", text: "Overview" },
           ...(this.session.user.role === "admin" ? adminMenu : clientMenu),
           { id: "console", icon: ">_", text: "API console" }];
+      },
+      consoleTemplateGroups() {
+        const examples = consoleTemplateCatalog[this.session?.user?.role] || [];
+        return [
+          { label: "Read-only examples · Safe to explore", items: examples.filter(t => t.group === "read") },
+          { label: "Write operations · Changes real data", items: examples.filter(t => t.group === "write") }
+        ];
+      },
+      selectedConsoleTemplate() {
+        return this.consoleTemplateGroups.flatMap(group => group.items)
+          .find(t => t.id === this.consoleTemplateId) || null;
+      },
+      consoleHasPlaceholders() {
+        return /:[a-z_]+(?=[/?&]|$)/i.test(this.consoleForm.path) ||
+          /REPLACE_WITH_[A-Z_]+/.test(this.consoleForm.body);
       },
       heading() { return sections[this.tab][0]; },
       hint() { return sections[this.tab][1]; },
@@ -675,8 +784,8 @@
         this.cardSortBy = ""; this.cardSortDir = "asc";
         this.loginForm.email = "";
         this.loginForm.password = "";
-        this.consoleForm.body = "";
-        this.consoleForm.key = "";
+        this.consoleForm = { method: "GET", path: "/api/v1/client/catalog", body: "", key: "" };
+        this.consoleTemplateId = "";
         this.auditAction = ""; this.auditActor = ""; this.auditOutcome = "";
         this.auditFrom = ""; this.auditTo = "";
         this.response = { method: "", path: "", body: null, status: null, duration: "—" };
@@ -744,6 +853,10 @@
         if (section === "grants" && !preserveGrantClient && this.tab !== section) {
           this.clientId = "";
           this.accessClientQuery = "";
+        }
+        if (section === "console" && this.tab !== section) {
+          // Re-entering Console uses a safe read-only example for the current role.
+          this.applyConsoleTemplate(this.session.user.role === "admin" ? "admin-brands" : "client-catalog");
         }
         if (section === "grants") this.accessPickerOpen = false;
         this.validationErrors = [];
@@ -1219,7 +1332,32 @@
           await this.fetchCards();
         }, "Card cancelled.");
       },
+      clearConsolePlaceholderNotice() {
+        if (this.flash.kind === "error" &&
+            this.flash.text === "Replace the sample ID or REPLACE_WITH value before sending the request.")
+          this.flash.text = "";
+      },
+      applyConsoleTemplate(id) {
+        if (this.busy) return;
+        this.clearConsolePlaceholderNotice();
+        this.consoleTemplateId = id;
+        const template = this.selectedConsoleTemplate;
+        if (!template) return; // Custom: leave manually edited fields intact.
+        this.consoleForm = {
+          method: template.method, path: template.path,
+          body: template.body ? JSON.stringify(template.body, null, 2) : "",
+          key: template.uniqueKey && typeof window.crypto?.randomUUID === "function"
+            ? "review-" + window.crypto.randomUUID() : ""
+        };
+      },
+      setConsoleCustom() {
+        this.consoleTemplateId = "";
+        this.clearConsolePlaceholderNotice();
+      },
       async sendConsole() {
+        if (this.consoleHasPlaceholders) {
+          return this.notify("Replace the sample ID or REPLACE_WITH value before sending the request.", "error");
+        }
         await this.execute(async () => {
           const method = this.consoleForm.method;
           const path = this.consoleForm.path;
