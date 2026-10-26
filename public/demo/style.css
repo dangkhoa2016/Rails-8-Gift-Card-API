@@ -283,3 +283,34 @@ input[aria-invalid="true"]:focus{box-shadow:0 0 0 3px #d54c5b25}
 .card-search-form input{width:100%}
 .card-search-form .btn{flex-shrink:0}
 @media(max-width:710px){.card-search-form{width:100%;flex-wrap:wrap}.card-search-form .btn{width:100%}}
+
+/* Server-paginated My cards, keyboard-accessible and responsive. */
+.card-pagination-summary{display:flex;align-items:end;justify-content:space-between;flex-wrap:wrap;gap:12px;margin-top:17px;scroll-margin-top:16px}
+.card-pagination-summary p{margin:0;color:#687f9d;font-size:12px;font-weight:700}
+.card-pagination-summary label{display:flex;flex-direction:row;align-items:center;gap:10px}
+.card-pagination-summary select{width:80px;min-height:36px;padding:6px 9px}
+nav.card-pagination{display:flex;flex-direction:row;align-items:center;justify-content:center;flex-wrap:wrap;gap:10px;margin-top:20px}
+.card-pages{display:flex;flex-wrap:wrap;gap:5px}
+.card-page-button{min-width:34px;height:34px;padding:5px 8px;border:1px solid #dce5f2;border-radius:8px;background:white;color:#42648f;font-size:12px;font-weight:750}
+.card-page-button.current{background:#2d63d9;color:#fff;border-color:#2d63d9}
+.card-page-button:focus-visible{outline:2px solid #3983e9;outline-offset:2px}
+.card-page-count{font-size:11px;font-weight:700;color:#7e8da2}
+@media(max-width:710px){.card-pagination-summary{align-items:start}nav.card-pagination{flex-direction:row;gap:8px}.card-pages{order:0;width:auto;justify-content:center}.card-page-count{order:0;width:auto;text-align:center}}
+
+/* Gift card detail modal. Only the dialog body scrolls, not the underlying list. */
+.card-modal-overlay{position:fixed;inset:0;z-index:1100;display:flex;align-items:center;justify-content:center;padding:20px;background:#0d1c34b8}
+.card-detail-modal{width:min(750px,100%);max-height:min(90vh,900px);max-height:min(90dvh,900px);display:flex;flex-direction:column;min-height:0;overflow:hidden;border-radius:17px;background:#fff;box-shadow:0 28px 90px #0e1c3c55}
+.card-modal-header{display:flex;align-items:flex-start;justify-content:space-between;gap:16px;flex:none;border-bottom:1px solid #e7edf7;padding:22px 25px 17px}
+.card-modal-title{min-width:0;flex:1}
+.card-modal-title .card-details-heading{justify-content:flex-start;flex-wrap:wrap;gap:12px;margin-top:9px}
+.card-modal-title h3{font-size:20px;letter-spacing:-.4px;color:#243c61}
+.card-modal-close{flex:none;width:36px;height:36px;display:flex;align-items:center;justify-content:center;border:1px solid #dce5ee;border-radius:9px;background:#f7f9fc;color:#50627c;font-size:24px;line-height:1}
+.card-modal-close:hover{background:#eaf1fc}
+.card-modal-content{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:22px 25px}
+.card-detail-modal .card-details{margin:0;padding:0;border:none;border-radius:0;background:transparent}
+.card-detail-modal .record-details{margin:0;border-top:0}
+.card-detail-modal .record-details dl{grid-template-columns:minmax(130px,.4fr) minmax(0,1fr);gap:14px 17px}
+.card-detail-modal .card-pin-reveal-form{max-width:380px}
+.card-modal-footer{display:flex;justify-content:flex-end;flex:none;padding:13px 25px 18px;border-top:1px solid #e7edf7;background:#fff}
+.card-modal-close:focus-visible,.card-modal-footer button:focus-visible{outline:2px solid #3983e9;outline-offset:2px}
+@media(max-width:710px){.card-modal-overlay{padding:9px}.card-detail-modal{max-height:95vh;max-height:95dvh;border-radius:12px}.card-modal-header{padding:17px}.card-modal-content{padding:16px 17px}.card-modal-footer{padding:12px 17px}.card-detail-modal .record-details dl{grid-template-columns:1fr;gap:4px}.card-detail-modal .record-details dd{margin:0 0 10px}}

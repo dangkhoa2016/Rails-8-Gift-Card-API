@@ -33,7 +33,7 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include(
         "navigateTo('products',g.product_id)", "navigateTo('brands',g.brand_id)",
         "navigateTo('clients',g.client_id)", "navigateTo('catalog-brand',p.brand_id)",
-        "navigateTo('issue-product',p.id)", "navigateTo('cards',c.id)",
+        "navigateTo('issue-product',p.id)", "inspect('cards',c.id)",
         'class="loading-notice"', 'class="loading-icon"'
       )
       expect(response.body).to include(
@@ -66,7 +66,16 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include(
         'id="card-search"', 'v-model.trim="cardQuery"',
         '@submit.prevent="loadCards"', 'class="card-search-form"',
-        "Search card, Product or Brand"
+        "Search card, Product or Brand", 'id="card-per-page"',
+        'v-model.number="cardPerPage"', 'class="card-pagination"',
+        'changeCardPage(cardPage-1)', 'changeCardPage(cardPage+1)',
+        'ref="cardsListTop"', 'v-for="p in cardVisiblePages"',
+        'cardFirst}}', 'cardLast}}', 'of {{cardTotal}} matching cards'
+      )
+      expect(response.body).to include(
+        'class="card-modal-overlay"', 'class="card-detail-modal"',
+        'id="card-detail-modal-title"', '@keydown.tab="trapCardModalFocus"',
+        '@keydown.esc.stop.prevent="closeCardDetails()"', '@click.self="closeCardDetails()"'
       )
       expect(response.body).to include(
         'class="card-pin-filters"', 'v-model="cardStatus"',
@@ -108,6 +117,13 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       )
       expect(response.body).to include("loadingTable: false", "submitting: false")
       expect(response.body).to include(
+        'cardPage: 1, cardPerPage: 25, cardTotal: 0',
+        'cardPageCount()', 'cardVisiblePages()', 'async changeCardPage(nextPage)',
+        'this.$refs.cardsListTop?.scrollIntoView(', 'async changeCardPerPage()',
+        'this.cardPage = 1;',
+        'this.cardTotal = Number(res.payload.meta?.total) || 0;'
+      )
+      expect(response.body).to include(
         "const collections = { brands: this.brands, clients: this.clients, products: this.products }",
         "const existing = collections[kind].find(record => record.id === Number(id))"
       )
@@ -146,9 +162,9 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       )
       expect(response.body).to include(
         "selectedIssueProduct()", "matchingIssueProducts()", "createIssueKey()",
-        "async scrollToCardDetails()", "async scrollToIssueResult()",
-        "detail.scrollIntoView(", "result.scrollIntoView(",
-        "await this.scrollToCardDetails()", "issuedHttpStatus: null",
+        "async openCardDetails()", "async scrollToIssueResult()",
+        "cardModalOpen = true", "result.scrollIntoView(",
+        "await this.openCardDetails()", "issuedHttpStatus: null",
         'this.issueForm = { product_id: "", key: "", with_pin: false };',
         'if (result) {', 'await this.scrollToIssueResult()'
       )
@@ -187,7 +203,7 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include(".card-pin-options", ".card-pin-badge", ".card-filter-bar")
       expect(response.body).to include(".card-pin-reveal-form .pin-reveal-error")
       expect(response.body).to include(".error-modal-overlay", ".console-error-summary")
-      expect(response.body).to include(".card-search-form")
+      expect(response.body).to include(".card-search-form", "nav.card-pagination", ".card-modal-overlay", ".card-detail-modal")
     end
   end
 

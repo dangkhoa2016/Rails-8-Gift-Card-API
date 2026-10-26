@@ -46,9 +46,11 @@
         loginForm: { email: "", password: "" },
         brands: [], products: [], clients: [], grants: [], catalog: [], issueCatalog: [], cards: [], audits: [],
         brandId: "", clientId: "", cardStatus: "", cardPinFilter: "", cardQuery: "",
+        cardPage: 1, cardPerPage: 25, cardTotal: 0,
         accessClientQuery: "", accessPickerOpen: false, accessProductQuery: "", accessGrantQuery: "",
         editingBrandId: null, editingProductId: null, editingClientId: null,
-        selectedDetail: null, cardDetail: null, catalogQuery: "", catalogCurrency: "",
+        selectedDetail: null, cardDetail: null, cardModalOpen: false, cardModalTrigger: null,
+        cardModalPreviousOverflow: "", catalogQuery: "", catalogCurrency: "",
         catalogBrandId: "",
         brandForm: { name: "", state: "active", custom_fields: "{}" },
         productForm: { brand_id: "", name: "", face_value: "100.00", currency: "USD", state: "active", custom_fields: "{}" },
@@ -79,6 +81,13 @@
         const q = this.issueProductQuery.trim().toLowerCase();
         return this.issueCatalog.filter(p => [p.name, p.brand_name, p.currency, p.face_value]
           .some(value => String(value || "").toLowerCase().includes(q)));
+      },
+      cardPageCount() { return Math.max(1, Math.ceil(this.cardTotal / this.cardPerPage)); },
+      cardFirst() { return this.cardTotal ? (this.cardPage - 1) * this.cardPerPage + 1 : 0; },
+      cardLast() { return Math.min(this.cardPage * this.cardPerPage, this.cardTotal); },
+      cardVisiblePages() {
+        const first = Math.max(1, Math.min(this.cardPage - 2, this.cardPageCount - 4));
+        return Array.from({ length: Math.min(5, this.cardPageCount) }, (_, i) => first + i);
       },
       reportRows() { return Array.isArray(this.reportData?.data) ? this.reportData.data : []; },
       reportKeys() { return [...new Set(this.reportRows.flatMap(row => Object.keys(row)))]; },
@@ -148,7 +157,7 @@
             card = result.payload.data;
           }
           this.cardDetail = card;
-          await this.scrollToCardDetails();
+          await this.openCardDetails();
         } else if (admin && kind === "brands-products") {
           this.brandId = id;
           await this.go("products");
@@ -243,7 +252,7 @@
         if (existing) {
           if (kind === "cards") {
             this.cardDetail = existing;
-            await this.scrollToCardDetails();
+            await this.openCardDetails();
           } else this.selectedDetail = { kind, data: existing };
           return;
         }
@@ -254,7 +263,7 @@
           else this.selectedDetail = { kind, data: res.payload.data };
           return res;
         }, null, "detail");
-        if (kind === "cards" && result) await this.scrollToCardDetails();
+        if (kind === "cards" && result) await this.openCardDetails();
       },
       hideIssuedPin() {
         if (this.issuedPinTimer) window.clearTimeout(this.issuedPinTimer);
@@ -294,7 +303,7 @@
           await this.execute(async () => {
             const res = await this.request("POST", apiRoot + "client/cards/" +
               encodeURIComponent(selected.id) + "/reveal_pin", { password });
-            if (this.cardDetail?.id === selected.id) {
+            if (this.cardModalOpen && this.cardDetail?.id === selected.id) {
               this.revealedCardPin = res.payload.data.pin;
               this.revealedCardPinTimer = window.setTimeout(() => this.hideCardPin(), 30000);
             }
@@ -304,15 +313,50 @@
           if (input) input.value = "";
         }
       },
-      async scrollToCardDetails() {
+      async openCardDetails() {
+        if (!this.cardDetail) return;
+        // Leave the list position untouched; only the dialog content can scroll.
+        if (!this.cardModalOpen) {
+          this.cardModalTrigger = document.activeElement;
+          this.cardModalPreviousOverflow = document.body.style.overflow;
+          document.body.style.overflow = "hidden";
+        }
+        this.cardModalOpen = true;
         await this.$nextTick();
-        const detail = this.$refs.cardDetails;
-        if (!detail) return;
         this.$refs.cardDetailsHeading?.focus({ preventScroll: true });
-        detail.scrollIntoView({
-          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth",
-          block: "start"
+      },
+      closeCardDetails(restoreFocus = true) {
+        if (!this.cardModalOpen) return;
+        this.hideCardPin(); // Clear plaintext PIN, its timer, password, and errors.
+        this.cardModalOpen = false;
+        this.cardDetail = null;
+        document.body.style.overflow = this.cardModalPreviousOverflow;
+        const trigger = this.cardModalTrigger;
+        this.cardModalTrigger = null;
+        this.cardModalPreviousOverflow = "";
+        if (restoreFocus) this.$nextTick(() => {
+          const target = trigger?.isConnected && trigger.matches?.("a,button,input,select,textarea,[tabindex]")
+            ? trigger : document.querySelector(".nav-link.selected");
+          target?.focus({ preventScroll: true });
         });
+      },
+      trapCardModalFocus(event) {
+        if (!this.cardModalOpen) return;
+        const modal = this.$refs.cardDetailDialog;
+        if (!modal) return;
+        const focusable = [...modal.querySelectorAll(
+          'a[href], button:not([disabled]), input:not([disabled]), select:not([disabled]), [tabindex]:not([tabindex="-1"])'
+        )].filter(el => el.getClientRects().length);
+        if (!focusable.length) return;
+        const first = focusable[0], last = focusable[focusable.length - 1];
+        if (event.shiftKey && (document.activeElement === first ||
+            document.activeElement === this.$refs.cardDetailsHeading)) {
+          event.preventDefault();
+          last.focus();
+        } else if (!event.shiftKey && document.activeElement === last) {
+          event.preventDefault();
+          first.focus();
+        }
       },
       notify(message, kind = "success") {
         this.flash = { text: message, kind };
@@ -479,6 +523,7 @@
         }
       },
       clearSession() {
+        this.closeCardDetails(false);
         this.hideCardPin();
         this.hideIssuedPin();
         this.validationErrors = [];
@@ -501,6 +546,7 @@
         this.accessProductQuery = ""; this.accessGrantQuery = "";
         this.catalog = []; this.issueCatalog = []; this.cards = []; this.audits = [];
         this.cardStatus = ""; this.cardPinFilter = ""; this.cardQuery = "";
+        this.cardPage = 1; this.cardPerPage = 25; this.cardTotal = 0;
         this.loginForm.email = "";
         this.loginForm.password = "";
         this.consoleForm.body = "";
@@ -540,6 +586,7 @@
       },
       async go(section, { preserveGrantClient = false, brandId = null, selectedProductId = null } = {}) {
         if (this.busy || !this.menu.some(item => item.id === section)) return;
+        this.closeCardDetails(false);
         this.hideCardPin();
         if (section !== "issue") this.forgetIssuedPin();
         if (section === "catalog") {
@@ -559,6 +606,8 @@
           this.cardQuery = "";
           this.cardStatus = "";
           this.cardPinFilter = "";
+          this.cardPage = 1;
+          this.cardTotal = 0;
           this.cards = [];
         }
         // Navigation from a Client or Audit link retains the targeted Client;
@@ -646,14 +695,26 @@
       },
       async fetchCards() {
         this.hideCardPin();
-        const q = new URLSearchParams({ per_page: "100" });
+        const q = new URLSearchParams({
+          page: String(this.cardPage), per_page: String(this.cardPerPage)
+        });
         if (this.cardQuery.trim()) q.set("q", this.cardQuery.trim());
         if (this.cardStatus) q.set("status", this.cardStatus);
         if (this.cardPinFilter) q.set("has_pin", this.cardPinFilter === "with" ? "true" : "false");
         const res = await this.request("GET", apiRoot + "client/cards?" + q);
         this.cards = res.payload.data || [];
-        if (this.cardDetail && !this.cards.some(c => c.id === this.cardDetail.id))
-          this.cardDetail = null;
+        this.cardTotal = Number(res.payload.meta?.total) || 0;
+        // A cancellation or concurrent change can shrink the result set.
+        // Recover the last populated page rather than trapping the user on an empty page.
+        if (this.cardPage > this.cardPageCount) {
+          this.cardPage = this.cardPageCount;
+          return this.fetchCards();
+        }
+        if (this.cardDetail && !this.cards.some(c => c.id === this.cardDetail.id)) {
+          if (this.cardModalOpen) this.closeCardDetails(false);
+          else this.cardDetail = null;
+        }
+        return res;
       },
       async fetchReport() {
         const q = new URLSearchParams();
@@ -717,7 +778,32 @@
         this.accessProductQuery = "";
         await this.execute(() => this.fetchGrants(), null, "table");
       },
-      async loadCards() { await this.execute(() => this.fetchCards(), null, "table"); },
+      async loadCards() {
+        this.cardPage = 1; // Search, Status, and PIN filters always begin on page one.
+        await this.execute(() => this.fetchCards(), null, "table");
+      },
+      async changeCardPage(nextPage) {
+        if (this.busy || !Number.isSafeInteger(nextPage) ||
+            nextPage < 1 || nextPage > this.cardPageCount || nextPage === this.cardPage) return;
+        const previous = this.cardPage;
+        this.cardPage = nextPage;
+        const result = await this.execute(() => this.fetchCards(), null, "table");
+        if (!result) {
+          this.cardPage = previous;
+          return;
+        }
+        // Page controls are below the table; scroll to the updated list header.
+        await this.$nextTick();
+        this.$refs.cardsListTop?.scrollIntoView({
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+          block: "start"
+        });
+      },
+      async changeCardPerPage() {
+        if (this.busy) return;
+        this.cardPage = 1;
+        await this.execute(() => this.fetchCards(), null, "table");
+      },
       toggleCardPinFilter(mode) {
         if (this.busy || !["with", "without"].includes(mode)) return;
         this.cardPinFilter = this.cardPinFilter === mode ? "" : mode;
