@@ -45,7 +45,7 @@
         validationErrors: [],
         loginForm: { email: "", password: "" },
         brands: [], products: [], clients: [], grants: [], catalog: [], cards: [], audits: [],
-        brandId: "", clientId: "", cardStatus: "",
+        brandId: "", clientId: "", cardStatus: "", cardPinFilter: "",
         accessClientQuery: "", accessPickerOpen: false, accessProductQuery: "", accessGrantQuery: "",
         editingBrandId: null, editingProductId: null, editingClientId: null,
         selectedDetail: null, cardDetail: null, catalogQuery: "", catalogCurrency: "",
@@ -55,6 +55,8 @@
         clientForm: { email: "", password: "", payout_rate: "90", active: true },
         issueForm: { product_id: "", key: "", with_pin: false },
         issueProductQuery: "", issued: null, issuedHttpStatus: null,
+        issuedPinVisible: false, issuedPinTimer: null,
+        revealedCardPin: "", revealedCardPinTimer: null, pinRevealError: "",
         reportFrom: "", reportTo: "", reportGroup: "by_brand", reportData: null,
         auditAction: "", auditActor: "", auditOutcome: "", auditFrom: "", auditTo: "",
         consoleForm: { method: "GET", path: "/api/v1/client/catalog", body: "", key: "" },
@@ -137,6 +139,8 @@
           this.issueProductQuery = "";
           await this.go("issue");
         } else if (kind === "cards" && !admin) {
+          this.hideCardPin();
+          this.forgetIssuedPin();
           // A card row already has all the fields in the detail response.
           const card = this.cards.find(item => item.id === id);
           if (card) {
@@ -236,6 +240,7 @@
       },
       async inspect(kind, id) {
         if (this.busy) return;
+        if (kind === "cards") this.hideCardPin();
         const routes = { brands: "admin/brands/", products: "admin/products/",
           clients: "admin/clients/", cards: "client/cards/" };
         if (!routes[kind]) return;
@@ -257,6 +262,54 @@
           return res;
         }, null, "detail");
         if (kind === "cards" && result) await this.scrollToCardDetails();
+      },
+      hideIssuedPin() {
+        if (this.issuedPinTimer) window.clearTimeout(this.issuedPinTimer);
+        this.issuedPinTimer = null;
+        this.issuedPinVisible = false;
+      },
+      forgetIssuedPin() {
+        this.hideIssuedPin();
+        // Once leaving the issuance workspace, discard its plaintext PIN.
+        // It can be recovered via the password-confirmed My cards workflow.
+        if (this.issued?.pin) this.issued = { ...this.issued, pin: null };
+      },
+      showIssuedPin() {
+        if (!this.issued?.pin) return;
+        this.hideIssuedPin();
+        this.issuedPinVisible = true;
+        this.issuedPinTimer = window.setTimeout(() => this.hideIssuedPin(), 30000);
+      },
+      hideCardPin() {
+        if (this.revealedCardPinTimer) window.clearTimeout(this.revealedCardPinTimer);
+        this.revealedCardPinTimer = null;
+        this.revealedCardPin = "";
+        this.pinRevealError = "";
+        if (this.$refs.pinPasswordInput) this.$refs.pinPasswordInput.value = "";
+      },
+      async revealCardPin() {
+        const selected = this.cardDetail;
+        const input = this.$refs.pinPasswordInput;
+        const password = input?.value || "";
+        if (!selected?.has_pin || !password) {
+          this.pinRevealError = "Enter your account password to reveal this Card's PIN.";
+          input?.focus();
+          return;
+        }
+        this.hideCardPin();
+        try {
+          await this.execute(async () => {
+            const res = await this.request("POST", apiRoot + "client/cards/" +
+              encodeURIComponent(selected.id) + "/reveal_pin", { password });
+            if (this.cardDetail?.id === selected.id) {
+              this.revealedCardPin = res.payload.data.pin;
+              this.revealedCardPinTimer = window.setTimeout(() => this.hideCardPin(), 30000);
+            }
+            return res;
+          }, "PIN displayed for up to 30 seconds.", "submit", true);
+        } finally {
+          if (input) input.value = "";
+        }
       },
       async scrollToCardDetails() {
         await this.$nextTick();
@@ -337,7 +390,7 @@
         }
         return { status: res.status, payload, duration };
       },
-      async execute(fn, success, mode = "submit") {
+      async execute(fn, success, mode = "submit", inlinePinError = false) {
         if (this.busy) return null;
         this.busy = true;
         this.loadingTable = mode === "table";
@@ -353,6 +406,9 @@
           if (error.status === 401 && this.session) {
             this.clearSession();
             this.notify("Session expired or account disabled. Sign in again.", "error");
+          } else if (inlinePinError) {
+            // Reveal PIN failures belong beside the password field, not in the page header.
+            this.pinRevealError = this.errorMessage(error);
           } else {
             this.validationErrors = this.validationDetails(error);
             this.notify(this.validationErrors.length
@@ -368,6 +424,8 @@
         }
       },
       clearSession() {
+        this.hideCardPin();
+        this.hideIssuedPin();
         this.validationErrors = [];
         this.session = null;
         this.loadingTable = false;
@@ -383,6 +441,7 @@
         this.clientId = ""; this.accessClientQuery = ""; this.accessPickerOpen = false;
         this.accessProductQuery = ""; this.accessGrantQuery = "";
         this.catalog = []; this.cards = []; this.audits = [];
+        this.cardStatus = ""; this.cardPinFilter = "";
         this.loginForm.email = "";
         this.loginForm.password = "";
         this.consoleForm.body = "";
@@ -422,6 +481,8 @@
       },
       async go(section, preserveGrantClient = false) {
         if (this.busy || !this.menu.some(item => item.id === section)) return;
+        this.hideCardPin();
+        if (section !== "issue") this.forgetIssuedPin();
         // Navigation from a Client or Audit link retains the targeted Client;
         // a direct menu visit asks for an explicit Client selection.
         if (section === "grants" && !preserveGrantClient && this.tab !== section) {
@@ -500,10 +561,14 @@
           this.issueForm.product_id = "";
       },
       async fetchCards() {
+        this.hideCardPin();
         const q = new URLSearchParams({ per_page: "100" });
         if (this.cardStatus) q.set("status", this.cardStatus);
+        if (this.cardPinFilter) q.set("has_pin", this.cardPinFilter === "with" ? "true" : "false");
         const res = await this.request("GET", apiRoot + "client/cards?" + q);
         this.cards = res.payload.data || [];
+        if (this.cardDetail && !this.cards.some(c => c.id === this.cardDetail.id))
+          this.cardDetail = null;
       },
       async fetchReport() {
         const q = new URLSearchParams();
@@ -568,6 +633,17 @@
         await this.execute(() => this.fetchGrants(), null, "table");
       },
       async loadCards() { await this.execute(() => this.fetchCards(), null, "table"); },
+      toggleCardPinFilter(mode) {
+        if (this.busy || !["with", "without"].includes(mode)) return;
+        this.cardPinFilter = this.cardPinFilter === mode ? "" : mode;
+        return this.loadCards();
+      },
+      clearCardFilters() {
+        if (this.busy) return;
+        this.cardStatus = "";
+        this.cardPinFilter = "";
+        return this.loadCards();
+      },
       async loadCatalog() { await this.execute(() => this.fetchCatalog(), null, "table"); },
       async loadReport() { await this.execute(() => this.fetchReport(), "Report loaded.", "table"); },
       async loadAudit() { await this.execute(() => this.fetchAudit(), "Audit filters applied.", "table"); },
@@ -701,6 +777,7 @@
           const res = await this.request("POST", apiRoot + "client/cards",
             { product_id: Number(this.issueForm.product_id), with_pin: this.issueForm.with_pin },
             this.issueForm.key.trim());
+          this.hideIssuedPin();
           this.issued = res.payload.data;
           this.issuedHttpStatus = res.status;
           return res;

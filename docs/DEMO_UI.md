@@ -64,3 +64,19 @@ The API console supports GET, POST, PATCH and DELETE for same-origin /api/v1/ en
     node --check public/demo/app.js
 
 The Rails HTTP smoke tests for the interface live in spec/requests/demo_ui_spec.rb. Manual/browser verification is useful in addition to, not instead of, the complete RSpec suite.
+
+### Client My cards: PIN availability filters
+
+The two checkboxes **With PIN** and **Without PIN** are mutually exclusive. Selecting one filters the current Client's cards, clicking it again returns to all PIN states, and **Clear filters** also resets Status. These filters are combined on the server before pagination, including cancelled cards. The list and detail responses contain only the `has_pin` boolean (`Enabled` or `None` in the UI). The encrypted PIN itself is never returned by GET endpoints.
+
+### Client PIN reveal: step-up verification and temporary display
+
+In **Issue card**, a PIN returned by a successful issue/replay response is **masked by default** in the Latest Issuance Response panel. Click **Reveal PIN** to show it, or **Hide PIN** to mask it immediately; the screen automatically masks the PIN after 30 seconds. No-PIN cards do not show this control. Leaving Issue card discards the previously issued PIN from the Client UI state; to reveal that PIN again, use the password-confirmed My cards workflow.
+
+In **My cards**, selecting **View** opens the Card detail. For an owned Card with `has_pin=true`, the Client can enter their current account password and click **Reveal PIN**. The separate `POST /api/v1/client/cards/:id/reveal_pin` endpoint checks ownership, reconfirms the current password, and returns the PIN with `Cache-Control: no-store, private`. The decrypted PIN is never included in normal GET list/detail responses. The password is read from an unbound input, cleared after submission, and not persisted in Vue state, local storage, or browser history. PIN reveal and failed attempts are audited without storing credentials or PIN values. After five wrong passwords in 15 minutes, reveal is rate-limited (HTTP 429) for that Client. The PIN disappears on **Hide PIN**, navigation, sign-out, or after 30 seconds; it is not copied into the list/detail record.
+
+Use a Client's own account password, **not an Admin password**. A Card without a PIN shows `None`, not a Reveal action. Cancelled Cards owned by that Client can still be revealed. PINs should not be shared in screenshots or logs.
+
+### Inline errors for My cards PIN confirmation
+
+The password-confirmation form for **My cards → View → Reveal PIN** displays incorrect-password, rate-limit and other non-session PIN reveal errors directly **below the password input**, using `role=alert`, `aria-invalid` and `aria-describedby`. The global page-header error banner is reserved for unrelated requests and expired sessions. Errors disappear when the Client types again, selects a different Card, signs out, or successfully reveals the PIN. The password field is always cleared after an attempt. Backend authentication, ownership, throttling and audit behavior are unchanged.

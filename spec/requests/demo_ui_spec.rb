@@ -52,6 +52,23 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'ref="cardDetails"', 'ref="cardDetailsHeading"',
         "@click=\"inspect('cards',c.id)\""
       )
+      expect(response.body).to include(
+        'class="card-pin-filters"', 'v-model="cardStatus"',
+        "cardPinFilter==='with'", "cardPinFilter==='without'",
+        "toggleCardPinFilter('with')", "toggleCardPinFilter('without')",
+        'c.has_pin', 'cardDetail.has_pin', '@click="clearCardFilters"'
+      )
+      expect(response.body).to include(
+        "issuedPinVisible?issued.pin:", "issuedPinVisible?'Hide PIN':'Reveal PIN'",
+        'ref="pinPasswordInput"', '@submit.prevent="revealCardPin"',
+        'v-if="revealedCardPin"', 'Automatically hidden after 30 seconds'
+      )
+      expect(response.body).to include(
+        'id="pin-reveal-error"', 'class="field-error pin-reveal-error"',
+        'role="alert"', ':aria-invalid="!!pinRevealError"',
+        "@input=\"pinRevealError=''\""
+      )
+      expect(response.body).not_to include('PIN: {{issued.pin}}')
       expect(response.body).not_to include('@submit.prevent="grantAccess"', 'id="access-client-select"')
       expect(response.body).to include(
         "validationErrors.length", "entry.message", "client-email-error",
@@ -97,6 +114,21 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'this.issueForm = { product_id: "", key: "", with_pin: false };',
         'if (result) {', 'await this.scrollToIssueResult()'
       )
+      expect(response.body).to include(
+        "cardPinFilter: ", "toggleCardPinFilter(mode)", "clearCardFilters()",
+        'q.set("has_pin", this.cardPinFilter === "with" ? "true" : "false")'
+      )
+      expect(response.body).to include(
+        "hideIssuedPin()", "showIssuedPin()", "hideCardPin()", "async revealCardPin()",
+        "this.revealedCardPin = res.payload.data.pin", "issuedPinVisible: false",
+        '"/reveal_pin", { password }'
+      )
+      expect(response.body).to include(
+        'pinRevealError: ""', 'inlinePinError = false',
+        'this.pinRevealError = this.errorMessage(error)',
+        '"PIN displayed for up to 30 seconds.", "submit", true',
+        'this.pinRevealError = ""'
+      )
       expect(response.body).not_to include("grantProductId")
       get "/demo/style.css"
       expect(response).to have_http_status(:ok)
@@ -107,6 +139,8 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include(".access-client-results", ".access-client-option")
       expect(response.body).to include(".audit-filters", ".audit-filter-actions")
       expect(response.body).to include(".issue-columns", ".issue-product-choice", ".card-details")
+      expect(response.body).to include(".card-pin-options", ".card-pin-badge", ".card-filter-bar")
+      expect(response.body).to include(".card-pin-reveal-form .pin-reveal-error")
     end
   end
 
