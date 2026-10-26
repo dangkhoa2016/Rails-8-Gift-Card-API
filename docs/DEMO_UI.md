@@ -94,3 +94,9 @@ WOGI_SHOW_EXCEPTION_DETAILS=true bundle exec rails server --binding 127.0.0.1 --
 ```
 
 Changing the setting for an already running server requires restarting Rails with the desired environment. The modal can still display the safe API response when details are disabled.
+
+### Pagination fixtures for API reviewers
+
+The development-only `db/seeds.rb` creates sufficient synthetic Brands, Products, Clients, Product Access grants, Gift Cards and audited card events for multi-page API testing (including `per_page=100`). It is safe to rerun without resetting the database. Account credentials are not printed, and extra test Client passwords are randomly generated and not exposed. On a persistent Kaggle runtime with existing accounts, run `bash /kaggle/working/setup_wogi_kaggle.sh seed` explicitly to add the fixtures; `resume` intentionally does not reseed a populated database.
+
+Use **API Console** to explore pagination: Admin `GET /api/v1/admin/brands?page=2&per_page=25`, Admin `GET /api/v1/admin/clients?page=2&per_page=25`, Admin `GET /api/v1/admin/audit_logs?page=2&per_page=25` and Client `GET /api/v1/client/cards?page=2&per_page=25&has_pin=true`. Inspect `meta.page`, `meta.per_page` and `meta.total` and compare page 1 with page 2. `per_page` is capped at 100. The standard Admin/Client workspace lists currently fetch only the first page and do not yet have next/previous controls; API Console exercises the pagination endpoints directly. The Client Catalog endpoint returns its eligible result set without server-side pagination.

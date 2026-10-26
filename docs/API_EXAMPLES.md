@@ -131,3 +131,29 @@ curl -i http://localhost:3000/api/v1/client/catalog7 -H 'Accept: application/jso
 ```
 
 Returns HTTP **404**, `error.code = "route_not_found"`, a human-readable error message and `request_id`. No Rails framework traces are returned by default. For trusted local debugging only, set `WOGI_SHOW_EXCEPTION_DETAILS=true` **before starting Rails** to add `error.details` containing exception class, a filtered message and up to 15 backtrace entries; production always ignores this flag. The Demo's **View error details** modal shows the returned JSON, not server log files.
+
+### Pagination with the development demo seed
+
+After running `bin/rails db:seed` (development only), use the two demo accounts to obtain the appropriate JWTs:
+
+```bash
+# Admin: two different pages of Brands (the seed includes 121 Brands).
+curl -sS 'http://localhost:3000/api/v1/admin/brands?page=1&per_page=25' \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+curl -sS 'http://localhost:3000/api/v1/admin/brands?page=2&per_page=25' \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# Admin: Clients and audited activity.
+curl -sS 'http://localhost:3000/api/v1/admin/clients?page=2&per_page=25' \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+curl -sS 'http://localhost:3000/api/v1/admin/audit_logs?page=2&per_page=25' \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+
+# Client: card history, including PIN availability and status filters.
+curl -sS 'http://localhost:3000/api/v1/client/cards?page=2&per_page=25&has_pin=true' \
+  -H "Authorization: Bearer $CLIENT_TOKEN"
+curl -sS 'http://localhost:3000/api/v1/client/cards?page=2&per_page=25&status=cancelled' \
+  -H "Authorization: Bearer $CLIENT_TOKEN"
+```
+
+Check `meta.page`, `meta.per_page`, and `meta.total`; verify that page IDs differ. The API accepts `per_page=1..100` (higher values are capped). For the seeded Demo Gift Cards Brand, the nested Admin Products endpoint contains more than 100 Products. The built-in Demo **API Console** can send the same requests without installing curl. Standard directory lists currently show only the first page; they do not yet offer visible pagination controls.
