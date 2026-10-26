@@ -80,3 +80,17 @@ Use a Client's own account password, **not an Admin password**. A Card without a
 ### Inline errors for My cards PIN confirmation
 
 The password-confirmation form for **My cards → View → Reveal PIN** displays incorrect-password, rate-limit and other non-session PIN reveal errors directly **below the password input**, using `role=alert`, `aria-invalid` and `aria-describedby`. The global page-header error banner is reserved for unrelated requests and expired sessions. Errors disappear when the Client types again, selects a different Card, signs out, or successfully reveals the PIN. The password field is always cleared after an attempt. Backend authentication, ownership, throttling and audit behavior are unchanged.
+
+### Friendly API errors and optional diagnostics
+
+When an API request fails, the UI shows a short, understandable message rather than an exception object or Rails framework trace. The **API console** displays a friendly failure summary, HTTP status and request ID. Choose **View error details** to open a keyboard-accessible modal displaying the actual **raw JSON HTTP error response** (not the server-side Rails log file). Other workspace request errors also provide a details button with the same modal. Sensitive response keys (including PIN, passwords and tokens) are redacted before display. Close using the X, Close button, backdrop or Escape.
+
+For a deliberately mistyped endpoint such as `GET /api/v1/client/catalog7`, the API returns HTTP 404 and `error.code=route_not_found`, not a framework trace. The environment variable `WOGI_SHOW_EXCEPTION_DETAILS` defaults to `false`. When set to `true` **in a non-production environment**, the `error.details` object may additionally include `exception_class`, filtered `exception_message`, and up to 15 filtered backtrace entries. This is only for trusted debugging; **never enable debug details on a publicly accessible Cloudflare Quick Tunnel**. Production always disables detail exposure. Other business/API errors continue to retain their existing `error.code`/`error.message` contract.
+
+Example (for a trusted local instance only):
+
+```bash
+WOGI_SHOW_EXCEPTION_DETAILS=true bundle exec rails server --binding 127.0.0.1 --port 3000
+```
+
+Changing the setting for an already running server requires restarting Rails with the desired environment. The modal can still display the safe API response when details are disabled.

@@ -258,3 +258,21 @@ input[aria-invalid="true"]:focus{box-shadow:0 0 0 3px #d54c5b25}
 /* Reveal PIN confirmation errors belong directly to the password input. */
 .card-pin-reveal-form .pin-reveal-error{display:block;width:100%;margin:-3px 0 0;color:#b63845;font-size:12px;font-weight:700;line-height:1.5}
 .card-pin-reveal-form input[aria-invalid="true"]{border-color:#d54c5b;background:#fffafa}
+
+
+/* Friendly HTTP errors: read the summary first, expand sanitized raw API JSON on demand. */
+.error-summary-actions{display:flex;align-items:center;flex-wrap:wrap;gap:10px;margin-top:11px}
+.error-status{font-size:11px;font-weight:850;padding:4px 8px;border-radius:7px;color:#a9394a;background:#ffdfe4}
+.error-request-id{font-size:11px;color:#855e68;overflow-wrap:anywhere}
+.alert.error .error-detail-trigger{border-color:#e8b2bd;color:#8c3345;font-size:11px;background:#fff}
+.console-error-summary{margin-top:15px;border:1px solid #f0c5cb;background:#fff5f6;border-radius:12px;padding:19px;color:#a23949;font-size:13px;line-height:1.6}
+.console-error-summary strong{display:block}.console-error-summary p{font-size:11px;margin:10px 0}.console-error-summary .btn{margin-top:11px}
+.error-modal-overlay{position:fixed;inset:0;z-index:1000;background:#101827b8;display:flex;align-items:center;justify-content:center;padding:18px}
+.error-modal{width:min(850px,100%);max-height:min(88vh,900px);overflow:auto;background:#fff;border-radius:16px;padding:23px;box-shadow:0 28px 90px #0e1c3c55}
+.error-modal-heading{display:flex;align-items:flex-start;justify-content:space-between;gap:12px}
+.error-modal-heading h2{margin:6px 0 13px}
+.error-modal-close{width:36px;height:36px;display:flex;justify-content:center;align-items:center;border:1px solid #dce5ee;border-radius:9px;background:#f7f9fc;color:#50627c;font-size:24px;flex:none}
+.error-modal-metadata{display:flex;flex-wrap:wrap;align-items:center;gap:9px 16px;font-size:12px;color:#62738a;overflow-wrap:anywhere}
+.error-modal-raw{white-space:pre-wrap;max-height:min(53vh,500px);overflow:auto;font-size:12px}
+.error-modal-actions{display:flex;justify-content:end;margin-top:16px}
+@media(max-width:710px){.error-modal{padding:17px;max-height:92vh}.error-modal-overlay{padding:10px}.error-modal-raw{max-height:48vh}.console-error-summary .btn{width:100%}}

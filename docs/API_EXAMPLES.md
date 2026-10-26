@@ -123,3 +123,11 @@ JSON
 ```
 
 The example password is only a placeholder. The endpoint returns a PIN only after ownership and fresh password verification; it sets a `no-store` response, audits the attempt without sensitive values, and throttles repeated incorrect passwords. Do not save the real password or returned PIN in shell history, logs, screenshots, or public documentation.
+
+### Safe API error response (mistyped endpoint)
+
+```bash
+curl -i http://localhost:3000/api/v1/client/catalog7 -H 'Accept: application/json'
+```
+
+Returns HTTP **404**, `error.code = "route_not_found"`, a human-readable error message and `request_id`. No Rails framework traces are returned by default. For trusted local debugging only, set `WOGI_SHOW_EXCEPTION_DETAILS=true` **before starting Rails** to add `error.details` containing exception class, a filtered message and up to 15 backtrace entries; production always ignores this flag. The Demo's **View error details** modal shows the returned JSON, not server log files.

@@ -30,6 +30,11 @@
     <div v-if="flash.text" :class="['alert',flash.kind]" :role="flash.kind==='error'?'alert':'status'">
       <div class="alert-body">
         <strong>{{flash.text}}</strong>
+        <div v-if="flash.kind==='error' && lastApiError" class="error-summary-actions">
+          <span v-if="lastApiError.status" class="error-status">HTTP {{lastApiError.status}}</span>
+          <span v-if="lastApiError.requestId" class="error-request-id">Request ID: {{lastApiError.requestId}}</span>
+          <button type="button" class="btn outline small error-detail-trigger" ref="errorDetailsTrigger" @click="openErrorDetails">View error details</button>
+        </div>
         <ul v-if="validationErrors.length" class="validation-summary">
           <li v-for="(entry,index) in validationErrors" :key="entry.field+'-'+index">{{entry.message}}</li>
         </ul>
@@ -445,11 +450,30 @@
             <button :class="['btn','primary',{processing:submitting}]" :disabled="busy">Send request →</button>
           </form>
         </div>
-        <div class="panel"><span class="kicker">LIVE API RESPONSE</span><div class="response-heading"><h2>Response</h2><span v-if="response.status" :class="['http',response.status>=400?'error':'ok']">HTTP {{response.status}}</span></div><div class="response-meta">{{response.method}} {{response.path}} <span>{{response.duration}} ms</span></div><pre class="response-pre tall">{{pretty(response.body)}}</pre><p class="help">Token exists only in memory until refresh or sign-out. Avoid sharing screenshots containing PINs.</p></div>
+        <div class="panel"><span class="kicker">LIVE API RESPONSE</span><div class="response-heading"><h2>Response</h2><span v-if="response.status" :class="['http',response.status>=400?'error':'ok']">HTTP {{response.status}}</span></div><div class="response-meta">{{response.method}} {{response.path}} <span>{{response.duration}} ms</span></div>
+          <div v-if="response.status>=400" class="console-error-summary" role="alert">
+            <strong>{{lastApiError?.message||'The request could not be completed.'}}</strong>
+            <p v-if="lastApiError?.requestId">Request ID: <code>{{lastApiError.requestId}}</code></p>
+            <button v-if="lastApiError" type="button" class="btn outline small error-detail-trigger" ref="errorDetailsTrigger" @click="openErrorDetails">View error details</button>
+          </div>
+          <pre v-else class="response-pre tall">{{pretty(response.body)}}</pre>
+          <p class="help">Success responses remain available as JSON. For failures, open the details modal to inspect the API response. Do not share secrets or PINs.</p></div>
       </section>
     </template>
     <footer>WOGI Gift Card API · Optional demonstration UI · Vue 3 global CDN + Rails API</footer>
   </main>
+  <div v-if="errorModalOpen && lastApiError" class="error-modal-overlay" @click.self="closeErrorDetails" @keydown.esc.stop.prevent="closeErrorDetails">
+    <section class="error-modal" role="dialog" aria-modal="true" aria-labelledby="error-modal-title" aria-describedby="error-modal-desc">
+      <div class="error-modal-heading"><div><span class="kicker">API DIAGNOSTICS</span><h2 id="error-modal-title">Raw error response</h2></div>
+        <button class="error-modal-close" type="button" ref="errorModalClose" aria-label="Close error details" @click="closeErrorDetails">×</button></div>
+      <p id="error-modal-desc" class="muted">Read-only API response. Exception details appear only when explicitly enabled on the backend. Sensitive fields are redacted.</p>
+      <div class="error-modal-metadata"><span v-if="lastApiError.status" class="http error">HTTP {{lastApiError.status}}</span>
+        <span class="mono">{{lastApiError.method}} {{lastApiError.path}}</span>
+        <span v-if="lastApiError.requestId" class="mono">Request ID: {{lastApiError.requestId}}</span></div>
+      <pre class="response-pre error-modal-raw">{{lastApiError.raw}}</pre>
+      <div class="error-modal-actions"><button type="button" class="btn outline" @click="closeErrorDetails">Close</button></div>
+    </section>
+  </div>
 </div>
 </body>
 </html>

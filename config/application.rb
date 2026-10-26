@@ -1,4 +1,5 @@
 require_relative "boot"
+require_relative "../lib/wogi/api_exceptions_app"
 
 require "rails"
 # Pick the frameworks you want:
@@ -40,5 +41,7 @@ module GiftCardApi
     # Middleware like session, flash, cookies can be added back manually.
     # Skip views, helpers and assets when generating a new resource.
     config.api_only = true
+    # JSON-safe Rails routing/unhandled exceptions, instead of debug trace dumps.
+    config.exceptions_app = Wogi::ApiExceptionsApp.new
   end
 end

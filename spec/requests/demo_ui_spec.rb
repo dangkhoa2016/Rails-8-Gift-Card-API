@@ -18,6 +18,13 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include("/demo/app.js", "/demo/style.css")
       expect(response.body).to include("v-if=\"tab==='console'\"")
       expect(response.body).to include(
+        'class="error-modal-overlay"', 'role="dialog"', 'aria-modal="true"',
+        'id="error-modal-title"', 'class="response-pre error-modal-raw"',
+        '@click="openErrorDetails"', '@click.self="closeErrorDetails"',
+        'class="console-error-summary"', "View error details",
+        'v-if="response.status>=400"', 'v-else class="response-pre tall"'
+      )
+      expect(response.body).to include(
         '@submit.prevent="saveBrand"', '@submit.prevent="saveProduct"',
         '@submit.prevent="saveClient"', "inspect('brands',b.id)",
         "inspect('products',p.id)", "inspect('clients',c.id)",
@@ -84,6 +91,12 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include("async saveBrand()", "async saveProduct()", "async saveClient()")
       expect(response.body).to include("async inspect(kind, id)", "reportValue(row, key)")
       expect(response.body).to include("async navigateTo(kind, rawId)", "entityHref(kind, id)")
+      expect(response.body).to include(
+        'error?.body?.error?.code !== "validation_failed"',
+        "safeRawError(value)", "rememberApiError(error, method, path)",
+        "async openErrorDetails()", "closeErrorDetails()", "route_not_found",
+        "this.rememberApiError(error, method, path);", "lastApiError: null"
+      )
       expect(response.body).to include("loadingTable: false", "submitting: false")
       expect(response.body).to include(
         "const collections = { brands: this.brands, clients: this.clients, products: this.products }",
@@ -141,6 +154,7 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include(".issue-columns", ".issue-product-choice", ".card-details")
       expect(response.body).to include(".card-pin-options", ".card-pin-badge", ".card-filter-bar")
       expect(response.body).to include(".card-pin-reveal-form .pin-reveal-error")
+      expect(response.body).to include(".error-modal-overlay", ".console-error-summary")
     end
   end
 

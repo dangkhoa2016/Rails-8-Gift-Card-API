@@ -9,8 +9,10 @@ Rails.application.configure do
   # Do not eager load code on boot.
   config.eager_load = false
 
-  # Show full error reports.
-  config.consider_all_requests_local = true
+  # Never expose Rails' development exception pages over the public demo tunnel.
+  # WOGI_SHOW_EXCEPTION_DETAILS=true selectively adds sanitized API diagnostics.
+  config.consider_all_requests_local = false
+  config.action_dispatch.show_exceptions = :all
 
   # Enable server timing.
   config.server_timing = true

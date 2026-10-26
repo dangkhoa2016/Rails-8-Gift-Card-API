@@ -42,7 +42,7 @@
         tab: "overview", session: null, busy: false,
         loadingTable: false, loadingDetail: false, submitting: false,
         flash: { text: "", kind: "success" },
-        validationErrors: [],
+        validationErrors: [], lastApiError: null, errorModalOpen: false,
         loginForm: { email: "", password: "" },
         brands: [], products: [], clients: [], grants: [], catalog: [], cards: [], audits: [],
         brandId: "", clientId: "", cardStatus: "", cardPinFilter: "",
@@ -325,6 +325,9 @@
         this.flash = { text: message, kind };
       },
       validationDetails(error) {
+        // Exception diagnostics may also have a `details` object. Only model
+        // validation failures may be interpreted as per-field form errors.
+        if (error?.body?.error?.code !== "validation_failed") return [];
         const details = error?.body?.error?.details;
         if (!details || typeof details !== "object" || Array.isArray(details)) return [];
         const labels = {
@@ -354,7 +357,61 @@
           this.flash.text === "Please correct the following fields:") this.flash.text = "";
       },
       errorMessage(error) {
-        return error?.body?.error?.message || error?.message || "Unexpected request failure";
+        const status = Number(error?.status || 0);
+        const code = error?.body?.error?.code;
+        if (code === "route_not_found")
+          return "That API endpoint doesn't exist. Check the URL and try again.";
+        if (status >= 500)
+          return "The server couldn't complete this request. Please try again or contact support.";
+        if (status === 404)
+          return "The requested item or API endpoint couldn't be found.";
+        if (status === 403 && code === "forbidden")
+          return "Your account doesn't have permission to perform this action.";
+        if (status === 401)
+          return "Your session is no longer valid. Please sign in again.";
+        const message = error?.body?.error?.message;
+        return typeof message === "string" && message.length <= 250
+          ? message : (error?.message || "The request could not be completed.");
+      },
+      safeRawError(value) {
+        // The modal displays the HTTP response (not the server log). Redact secret
+        // keys even if a backend regression accidentally puts them in an error.
+        const seen = new WeakSet();
+        const sanitize = (item, key = "") => {
+          if (/(password|pin|token|authorization|secret|credential|activation_number|idempotency_key)/i.test(key))
+            return "[REDACTED]";
+          if (typeof item === "string") return item
+            .replace(/Bearer\s+[A-Za-z0-9._-]+/gi, "Bearer [REDACTED]")
+            .replace(/((?:password|pin|token|secret|authorization)\s*[=:]\s*)[^\s&"']+/gi, "$1[REDACTED]");
+          if (!item || typeof item !== "object") return item;
+          if (seen.has(item)) return "[CIRCULAR]";
+          seen.add(item);
+          if (Array.isArray(item)) return item.slice(0, 70).map(entry => sanitize(entry));
+          return Object.fromEntries(Object.entries(item).slice(0, 70)
+            .map(([name, entry]) => [name, sanitize(entry, name)]));
+        };
+        return JSON.stringify(sanitize(value), null, 2).slice(0, 20000);
+      },
+      rememberApiError(error, method, path) {
+        const status = error?.status || null;
+        const payload = error?.body || { error: { message: error?.message || "Request failed" } };
+        this.lastApiError = {
+          status, method: method || error?.method || "Request",
+          path: (path || error?.path || "").split("?")[0],
+          requestId: payload?.request_id || null,
+          message: this.errorMessage(error),
+          raw: this.safeRawError(payload)
+        };
+      },
+      async openErrorDetails() {
+        if (!this.lastApiError) return;
+        this.errorModalOpen = true;
+        await this.$nextTick();
+        this.$refs.errorModalClose?.focus();
+      },
+      closeErrorDetails() {
+        this.errorModalOpen = false;
+        this.$nextTick(() => this.$refs.errorDetailsTrigger?.focus());
       },
       async request(method, path, body, key, accessToken) {
         // Always use root-relative API paths; disallow external origins and protocol-relative URLs.
@@ -386,6 +443,8 @@
           err.status = res.status;
           err.body = payload;
           err.duration = duration;
+          err.method = method;
+          err.path = url.pathname;
           throw err;
         }
         return { status: res.status, payload, duration };
@@ -398,11 +457,14 @@
         this.submitting = mode === "submit";
         this.flash.text = "";
         this.validationErrors = [];
+        this.lastApiError = null;
+        this.errorModalOpen = false;
         try {
           const result = await fn();
           if (success) this.notify(typeof success === "function" ? success(result) : success);
           return result;
         } catch (error) {
+          this.rememberApiError(error);
           if (error.status === 401 && this.session) {
             this.clearSession();
             this.notify("Session expired or account disabled. Sign in again.", "error");
@@ -813,11 +875,13 @@
           try {
             const res = await this.request(method, path, data, this.consoleForm.key);
             this.response = { method, path, body: res.payload, status: res.status, duration: res.duration };
+            this.lastApiError = null;
           } catch (error) {
             if (error.status) {
               this.response = { method, path, body: error.body, status: error.status, duration: error.duration };
+              this.rememberApiError(error, method, path);
               if (error.status === 401) throw error;
-              return; // Display expected negative-test 4xx responses without losing the console view.
+              return; // Render friendly summary; raw response remains in the details modal.
             }
             throw error;
           }
