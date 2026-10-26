@@ -600,11 +600,69 @@
       </section>
 
       <section v-if="tab==='console'" class="two-col console">
-        <div class="panel"><span class="kicker">LIVE API REQUEST</span><h2>HTTP console</h2><p class="muted">Only same-origin <code>/api/v1/</code> paths are permitted; authentication uses the in-memory session JWT.</p>
-          <form class="stack" @submit.prevent="sendConsole"><div class="pair"><label>Method<select v-model="consoleForm.method"><option v-for="m in ['GET','POST','PATCH','DELETE']">{{m}}</option></select></label><label>Endpoint<input v-model.trim="consoleForm.path" placeholder="/api/v1/client/catalog" required></label></div>
-            <label>Idempotency-Key (optional)<input v-model.trim="consoleForm.key" placeholder="demo-order-001"></label>
-            <label>JSON body<textarea v-model="consoleForm.body" spellcheck="false" rows="12" class="mono" placeholder='{"product_id":1}'></textarea></label>
-            <button :class="['btn','primary',{processing:submitting}]" :disabled="busy">Send request →</button>
+        <div class="panel console-request-panel">
+          <span class="kicker">LIVE API REQUEST</span>
+          <h2>HTTP console</h2>
+          <p class="muted">Choose a real API example to automatically fill Method and Endpoint.
+            You can also edit the request manually. Authentication uses your current session.</p>
+
+          <div class="console-template-box">
+            <label for="console-template">Request template
+              <select id="console-template" v-model="consoleTemplateId"
+                      :disabled="busy" @change="applyConsoleTemplate(consoleTemplateId)">
+                <option value="">Custom request · Edit fields manually</option>
+                <optgroup v-for="group in consoleTemplateGroups" :key="group.label" :label="group.label">
+                  <option v-for="example in group.items" :key="example.id" :value="example.id">
+                    {{example.method}} · {{example.label}}
+                  </option>
+                </optgroup>
+              </select>
+            </label>
+            <div v-if="selectedConsoleTemplate" class="console-template-detail">
+              <span :class="['console-template-kind',selectedConsoleTemplate.group]">
+                {{selectedConsoleTemplate.group==='read'?'READ ONLY':'MODIFIES DATA'}}
+              </span>
+              <p>{{selectedConsoleTemplate.note}}</p>
+            </div>
+            <p v-else class="console-template-detail">Custom mode: Method, Endpoint, JSON body and Idempotency-Key remain editable.</p>
+            <p v-if="consoleHasPlaceholders" class="console-placeholder-warning" role="status">
+              <strong>Input required:</strong> Replace <code>:brand_id</code>, <code>:card_id</code>,
+              <code>:client_id</code>, <code>:product_id</code> or <code>REPLACE_WITH_…</code> with an actual value
+              from a previous GET response. Sending is disabled until you do.
+            </p>
+          </div>
+
+          <form class="stack console-request-form" @submit.prevent="sendConsole">
+            <div class="pair console-method-path">
+              <label>Method
+                <select id="console-method" v-model="consoleForm.method" :disabled="busy"
+                        @change="setConsoleCustom">
+                  <option v-for="m in ['GET','POST','PATCH','DELETE']" :key="m">{{m}}</option>
+                </select>
+              </label>
+              <label>Endpoint
+                <input id="console-endpoint" v-model.trim="consoleForm.path" :disabled="busy"
+                       @input="setConsoleCustom" placeholder="/api/v1/client/catalog" required
+                       autocapitalize="off" autocomplete="off" spellcheck="false">
+              </label>
+            </div>
+            <p class="console-field-tip">Only same-origin <code>/api/v1/</code> paths are allowed.
+              You cannot call an Admin endpoint as a Client.</p>
+            <label>Idempotency-Key <span class="console-optional">(optional except for issuing a Card)</span>
+              <input id="console-key" v-model.trim="consoleForm.key" :disabled="busy"
+                     placeholder="Unique request key for issuance" autocomplete="off" spellcheck="false">
+            </label>
+            <label>JSON body <span class="console-optional">(leave empty for GET requests)</span>
+              <textarea id="console-body" v-model="consoleForm.body" spellcheck="false" :disabled="busy"
+                        rows="8" class="mono" placeholder='{"product_id":1}'></textarea>
+            </label>
+            <p v-if="consoleForm.method!=='GET'" class="console-write-warning" role="status">
+              <strong>Write request:</strong> {{consoleForm.method}} may create, update or cancel real data.
+              Review the Endpoint, JSON body and any required ID before sending.
+            </p>
+            <button :class="['btn','primary',{processing:submitting}]" :disabled="busy||consoleHasPlaceholders">
+              {{busy?'Sending…':'Send request →'}}
+            </button>
           </form>
         </div>
         <div class="panel"><span class="kicker">LIVE API RESPONSE</span><div class="response-heading"><h2>Response</h2><span v-if="response.status" :class="['http',response.status>=400?'error':'ok']">HTTP {{response.status}}</span></div><div class="response-meta">{{response.method}} {{response.path}} <span>{{response.duration}} ms</span></div>
