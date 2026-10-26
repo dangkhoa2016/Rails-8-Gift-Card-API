@@ -465,3 +465,24 @@ nav.report-drilldown-pages{display:flex;flex-direction:row;flex-wrap:wrap;align-
 .product-preview-notice{display:flex;align-items:center;justify-content:space-between;gap:12px;flex-wrap:wrap;margin-top:17px;padding:12px 13px;border:1px solid #d8e6f8;border-radius:10px;background:#f6faff}
 .product-preview-notice p{font-size:11px;line-height:1.6;color:#607a9d;margin:0}
 @media(max-width:710px){.product-preview-notice .btn{width:100%}}
+
+/* Admin directory and Audit list pagination. */
+.directory-pagination-summary{margin-top:17px;scroll-margin-top:16px}
+.directory-pagination{margin-top:17px}
+.directory-detail-overlay{position:fixed;inset:0;z-index:1125;display:flex;align-items:center;justify-content:center;padding:18px;background:#101d36c2}
+.directory-detail-dialog{width:min(735px,100%);max-height:92vh;max-height:92dvh;display:flex;flex-direction:column;min-height:0;overflow:hidden;border-radius:16px;background:#fff;box-shadow:0 24px 80px #0e1c3c5d}
+.directory-detail-dialog .card-modal-header h2{font-size:21px;color:#273f62;margin:9px 0 0}
+.directory-detail-dialog .card-modal-header p{font-size:11px;margin:8px 0 0}
+.directory-detail-body{overflow-y:auto;overscroll-behavior:contain;flex:1;min-height:0;padding:21px 25px}
+.directory-detail-body .record-details{margin:0;border:0;padding:0}
+.directory-detail-body .record-details dl{grid-template-columns:minmax(130px,.35fr) minmax(0,1fr);gap:16px 20px}
+.directory-detail-body dd{min-width:0}
+.directory-detail-json{max-width:100%;max-height:260px;overflow:auto;padding:11px 13px;background:#f3f7fd;border:1px solid #dde8f6;border-radius:9px;font-size:11px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere}
+.directory-user-agent{white-space:normal;overflow-wrap:anywhere}
+@media(max-width:710px){.directory-detail-overlay{padding:8px}.directory-detail-dialog{max-height:96vh;max-height:96dvh}.directory-detail-body{padding:16px}.directory-detail-dialog .card-modal-header{padding:15px}.directory-detail-body .record-details dl{grid-template-columns:minmax(92px,.38fr) minmax(0,1fr);gap:13px}}
+.directory-detail-dialog #directory-modal-title:focus{outline:none}
+.directory-detail-dialog .card-modal-close:focus-visible,.directory-detail-dialog .card-modal-footer button:focus-visible{outline:2px solid #387fe4;outline-offset:2px}
+
+/* Product details reuse the Admin read-only dialog; money, status and JSON remain legible. */
+.directory-detail-dialog .directory-detail-subtle{display:inline-block;margin-left:7px;color:#8697ac;font-size:11px}
+.directory-detail-dialog .report-currency-badge{display:inline-flex;align-items:center;background:#eef5ff;border:1px solid #d2e3f7;color:#2b60a4;font-size:11px;font-weight:800;padding:5px 8px;border-radius:7px}

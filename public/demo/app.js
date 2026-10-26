@@ -143,6 +143,11 @@
         cardPage: 1, cardPerPage: 25, cardTotal: 0, cardSortBy: "", cardSortDir: "asc",
         productPage: 1, productPerPage: 25, productTotal: 0,
         productCatalogPreview: false,
+        brandPage: 1, brandPerPage: 25, brandTotal: 0,
+        clientPage: 1, clientPerPage: 25, clientTotal: 0,
+        auditPage: 1, auditPerPage: 25, auditTotal: 0, auditAppliedFilters: {},
+        directoryModalKind: null, directoryModalRecord: null,
+        directoryModalTrigger: null, directoryModalPreviousOverflow: "",
         accessClientQuery: "", accessPickerOpen: false, accessProductQuery: "", accessGrantQuery: "",
         editingBrandId: null, editingProductId: null, editingClientId: null,
         selectedDetail: null, cardDetail: null, cardModalOpen: false, cardModalTrigger: null,
@@ -201,6 +206,18 @@
         return this.issueCatalog.filter(p => [p.name, p.brand_name, p.currency, p.face_value]
           .some(value => String(value || "").toLowerCase().includes(q)));
       },
+      brandPageCount() { return Math.max(1, Math.ceil(this.brandTotal / this.brandPerPage)); },
+      brandFirst() { return this.brandTotal ? (this.brandPage - 1) * this.brandPerPage + 1 : 0; },
+      brandLast() { return Math.min(this.brandPage * this.brandPerPage, this.brandTotal); },
+      brandVisiblePages() { return this.listVisiblePages(this.brandPage, this.brandPageCount); },
+      clientPageCount() { return Math.max(1, Math.ceil(this.clientTotal / this.clientPerPage)); },
+      clientFirst() { return this.clientTotal ? (this.clientPage - 1) * this.clientPerPage + 1 : 0; },
+      clientLast() { return Math.min(this.clientPage * this.clientPerPage, this.clientTotal); },
+      clientVisiblePages() { return this.listVisiblePages(this.clientPage, this.clientPageCount); },
+      auditPageCount() { return Math.max(1, Math.ceil(this.auditTotal / this.auditPerPage)); },
+      auditFirst() { return this.auditTotal ? (this.auditPage - 1) * this.auditPerPage + 1 : 0; },
+      auditLast() { return Math.min(this.auditPage * this.auditPerPage, this.auditTotal); },
+      auditVisiblePages() { return this.listVisiblePages(this.auditPage, this.auditPageCount); },
       productPageCount() { return Math.max(1, Math.ceil(this.productTotal / this.productPerPage)); },
       productFirst() { return this.productTotal ? (this.productPage - 1) * this.productPerPage + 1 : 0; },
       productLast() { return Math.min(this.productPage * this.productPerPage, this.productTotal); },
@@ -291,11 +308,86 @@
         this.showBackToTop = window.scrollY > 360;
       },
       scrollToTop() {
-        if (this.cardModalOpen || this.reportDrilldownOpen || this.errorModalOpen) return;
+        if (this.cardModalOpen || this.reportDrilldownOpen || this.errorModalOpen || this.directoryModalKind) return;
         window.scrollTo({
           top: 0,
           behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
         });
+      },
+      listVisiblePages(page, count) {
+        const first = Math.max(1, Math.min(page - 2, count - 4));
+        return Array.from({ length: Math.min(5, count) }, (_, i) => first + i);
+      },
+      async scrollToDirectoryList(kind) {
+        await this.$nextTick();
+        this.$refs[kind + "ListTop"]?.scrollIntoView({
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+          block: "start"
+        });
+      },
+      async changeDirectoryPage(kind, next) {
+        const fields = { brands: ["brandPage", "brandPageCount", "fetchBrands"],
+          clients: ["clientPage", "clientPageCount", "fetchClients"],
+          audit: ["auditPage", "auditPageCount", "fetchAudit"] }[kind];
+        if (!fields || this.busy || this.tab !== kind || !Number.isSafeInteger(next) ||
+            next < 1 || next > this[fields[1]] || next === this[fields[0]]) return;
+        const previous = this[fields[0]];
+        this[fields[0]] = next;
+        const result = await this.execute(() => this[fields[2]](), null, "table");
+        if (!result) { this[fields[0]] = previous; return; }
+        await this.scrollToDirectoryList(kind);
+      },
+      async changeDirectoryPerPage(kind) {
+        const fields = { brands: ["brandPage", "fetchBrands"],
+          clients: ["clientPage", "fetchClients"], audit: ["auditPage", "fetchAudit"] }[kind];
+        if (!fields || this.busy || this.tab !== kind) return;
+        this[fields[0]] = 1;
+        await this.execute(() => this[fields[1]](), null, "table");
+      },
+      async openDirectoryModal(kind, record) {
+        if (!["brands", "clients", "products", "audit"].includes(kind) || !record) return;
+        this.directoryModalTrigger = document.activeElement;
+        this.directoryModalPreviousOverflow = document.body.style.overflow;
+        document.body.style.overflow = "hidden";
+        this.directoryModalKind = kind;
+        this.directoryModalRecord = record;
+        await this.$nextTick();
+        this.$refs.directoryModalHeading?.focus({ preventScroll: true });
+      },
+      closeDirectoryModal(restoreFocus = true) {
+        if (!this.directoryModalKind) return;
+        this.directoryModalKind = null;
+        this.directoryModalRecord = null;
+        document.body.style.overflow = this.directoryModalPreviousOverflow;
+        const trigger = this.directoryModalTrigger;
+        this.directoryModalTrigger = null;
+        this.directoryModalPreviousOverflow = "";
+        if (restoreFocus) this.$nextTick(() => {
+          const target = trigger?.isConnected ? trigger : document.querySelector(".nav-link.selected");
+          target?.focus({ preventScroll: true });
+        });
+      },
+      trapDirectoryModalFocus(event) {
+        const box = this.$refs.directoryModalDialog;
+        if (!box) return;
+        const elements = [...box.querySelectorAll('button:not([disabled]),a[href]')]
+          .filter(el => el.getClientRects().length);
+        if (!elements.length) return;
+        if (event.shiftKey && (document.activeElement === elements[0] ||
+            document.activeElement === this.$refs.directoryModalHeading)) {
+          event.preventDefault(); elements[elements.length - 1].focus();
+        } else if (!event.shiftKey && document.activeElement === elements[elements.length - 1]) {
+          event.preventDefault(); elements[0].focus();
+        }
+      },
+      safeAuditFields(data) {
+        if (data == null) return {};
+        if (Array.isArray(data)) return data.map(value => this.safeAuditFields(value));
+        if (typeof data !== "object") return data;
+        return Object.fromEntries(Object.entries(data).map(([key, value]) => [
+          key, /password|pin|secret|token|credential|authorization|digest|cipher|fingerprint|api.key/i.test(key)
+            ? "[REDACTED]" : this.safeAuditFields(value)
+        ]));
       },
       cardSortAria(column) {
         return this.cardSortBy === column
@@ -365,35 +457,34 @@
           this.accessClientQuery = "";
           this.accessPickerOpen = false;
           await this.go("grants", { preserveGrantClient: true });
-        } else if (admin && ["brands", "clients", "products"].includes(kind)) {
-          // The directory index and show endpoints serialize identical fields.
-          // Prefer the current directory row; for uncached cross-page targets,
-          // fetch only the target detail rather than refetching two lists.
-          const collections = { brands: this.brands, clients: this.clients, products: this.products };
-          let record = collections[kind].find(item => item.id === id);
-          if (!record) {
-            const result = await this.execute(
-              () => this.request("GET", apiRoot + "admin/" + kind + "/" + id), null, "detail");
-            if (!result) return;
-            record = result.payload.data;
-            // Show the fetched record without presenting the old brand's product list.
-            if (kind === "products") this.products = [record];
-            else collections[kind].push(record);
-          }
-          if (kind === "products") {
-            this.brandId = record.brand_id;
-            // An off-page Product deep link is a single-record preview, not a
-            // complete Brand catalog. Retain the one-detail-GET behavior.
-            if (this.tab !== "products") {
-              this.products = [record];
-              this.productCatalogPreview = true;
-              this.productPage = 1;
-              this.productTotal = 1;
+        } else if (admin && ["brands", "clients"].includes(kind)) {
+          if (this.tab !== kind) await this.go(kind);
+          if (this.tab === kind) await this.inspect(kind, id);
+        } else if (admin && kind === "products") {
+          if (this.tab === "products") {
+            // The row may be on another page: inspect fetches only the show
+            // endpoint when needed, without disturbing catalog pagination.
+            await this.inspect(kind, id);
+          } else {
+            // Audit/Product access -> Product: show the exact target and keep a
+            // clearly labelled preview, never pretend it is a full Brand list.
+            let record = this.products.find(item => item.id === id);
+            if (!record) {
+              const result = await this.execute(
+                () => this.request("GET", apiRoot + "admin/products/" + id), null, "detail");
+              if (!result) return;
+              record = result.payload.data;
             }
+            this.brandId = record.brand_id;
+            this.products = [record];
+            this.productCatalogPreview = true;
+            this.productPage = 1;
+            this.productTotal = 1;
+            this.tab = kind;
+            this.selectedDetail = { kind, data: record };
+            this.cardDetail = null;
+            await this.openDirectoryModal(kind, record);
           }
-          this.tab = kind;
-          this.selectedDetail = { kind, data: record };
-          this.cardDetail = null;
         }
       },
       reportValue(row, key) {
@@ -505,7 +596,11 @@
           if (kind === "cards") {
             this.cardDetail = existing;
             await this.openCardDetails();
-          } else this.selectedDetail = { kind, data: existing };
+          } else {
+            this.selectedDetail = { kind, data: existing };
+            if (kind === "brands" || kind === "clients" || kind === "products")
+              await this.openDirectoryModal(kind, existing);
+          }
           return;
         }
         // A deep-linked or paginated-out record is the only case needing GET show.
@@ -516,6 +611,8 @@
           return res;
         }, null, "detail");
         if (kind === "cards" && result) await this.openCardDetails();
+        if (["brands", "clients", "products"].includes(kind) && result)
+          await this.openDirectoryModal(kind, result.payload.data);
       },
       hideIssuedPin() {
         if (this.issuedPinTimer) window.clearTimeout(this.issuedPinTimer);
@@ -775,6 +872,7 @@
         }
       },
       clearSession() {
+        this.closeDirectoryModal(false);
         this.closeReportDrilldown(false);
         this.closeCardDetails(false);
         this.hideCardPin();
@@ -803,6 +901,9 @@
         this.cardSortBy = ""; this.cardSortDir = "asc";
         this.productPage = 1; this.productPerPage = 25; this.productTotal = 0;
         this.productCatalogPreview = false;
+        this.brandPage = 1; this.brandPerPage = 25; this.brandTotal = 0;
+        this.clientPage = 1; this.clientPerPage = 25; this.clientTotal = 0;
+        this.auditPage = 1; this.auditPerPage = 25; this.auditTotal = 0; this.auditAppliedFilters = {};
         this.loginForm.email = "";
         this.loginForm.password = "";
         this.consoleForm = { method: "GET", path: "/api/v1/client/catalog", body: "", key: "" };
@@ -842,6 +943,7 @@
       },
       async go(section, { preserveGrantClient = false, brandId = null, selectedProductId = null } = {}) {
         if (this.busy || !this.menu.some(item => item.id === section)) return;
+        this.closeDirectoryModal(false);
         this.closeReportDrilldown(false);
         this.closeCardDetails(false);
         this.hideCardPin();
@@ -857,6 +959,11 @@
           // Sidebar opens a clean chooser; Catalog product links supply only an ID.
           this.issueProductQuery = "";
           this.issueForm.product_id = selectedProductId || "";
+        }
+        if (this.tab !== section) {
+          if (section === "brands") this.brandPage = 1;
+          if (section === "clients") this.clientPage = 1;
+          if (section === "audit") this.auditPage = 1;
         }
         if (section === "products" && this.tab !== section) {
           // A new Products visit starts on the first page of the chosen Brand.
@@ -921,12 +1028,40 @@
           }
         }, null, "table");
       },
+      async fetchFullAdminDirectory(resource) {
+        // Related Admin selectors are loaded fully, independently of pagination.
+        const root = apiRoot + "admin/" + resource;
+        const params = new URLSearchParams({ page: "1", per_page: "100" });
+        const first = await this.request("GET", root + "?" + params);
+        const records = [...(first.payload.data || [])];
+        const total = Number(first.payload.meta?.total) || records.length;
+        for (let page = 2; records.length < total; page++) {
+          params.set("page", String(page));
+          const response = await this.request("GET", root + "?" + params);
+          const next = response.payload.data || [];
+          if (!next.length) break;
+          records.push(...next);
+        }
+        return { data: records, meta: { total } };
+      },
       async fetchBrands() {
-        const res = await this.request("GET", apiRoot + "admin/brands?per_page=100");
+        const directory = this.tab === "brands";
+        const page = directory ? this.brandPage : 1;
+        const perPage = directory ? this.brandPerPage : 100;
+        const res = directory
+          ? await this.request("GET", apiRoot + "admin/brands?page=" + page + "&per_page=" + perPage)
+          : { payload: await this.fetchFullAdminDirectory("brands") };
+        const total = Number(res.payload.meta?.total) || 0;
+        if (directory && page > 1 && page > Math.max(1, Math.ceil(total / perPage))) {
+          this.brandPage = Math.max(1, Math.ceil(total / perPage));
+          return this.fetchBrands();
+        }
         this.brands = res.payload.data || [];
-        if (!this.brands.some(b => b.id === Number(this.brandId))) this.brandId = this.brands[0]?.id || "";
+        if (directory) this.brandTotal = total;
+        if (!directory && !this.brands.some(b => b.id === Number(this.brandId))) this.brandId = this.brands[0]?.id || "";
         if (!this.editingProductId && !this.brands.some(b => b.id === Number(this.productForm.brand_id)))
           this.productForm.brand_id = this.brands[0]?.id || "";
+        return res;
       },
       async fetchProducts() {
         if (!this.brandId) {
@@ -956,10 +1091,22 @@
         return res;
       },
       async fetchClients() {
-        const res = await this.request("GET", apiRoot + "admin/clients?per_page=100");
+        const directory = this.tab === "clients";
+        const page = directory ? this.clientPage : 1;
+        const perPage = directory ? this.clientPerPage : 100;
+        const res = directory
+          ? await this.request("GET", apiRoot + "admin/clients?page=" + page + "&per_page=" + perPage)
+          : { payload: await this.fetchFullAdminDirectory("clients") };
+        const total = Number(res.payload.meta?.total) || 0;
+        if (directory && page > 1 && page > Math.max(1, Math.ceil(total / perPage))) {
+          this.clientPage = Math.max(1, Math.ceil(total / perPage));
+          return this.fetchClients();
+        }
         this.clients = res.payload.data || [];
-        if (!this.clients.some(c => c.id === Number(this.clientId)))
+        if (directory) this.clientTotal = total;
+        if (!directory && !this.clients.some(c => c.id === Number(this.clientId)))
           this.clientId = this.tab === "grants" ? "" : (this.clients[0]?.id || "");
+        return res;
       },
       async fetchGrants() {
         this.grants = [];
@@ -1128,21 +1275,33 @@
           throw new Error("Enter a valid UTC date and time.");
         return timestamp;
       },
-      async fetchAudit() {
-        const fromAt = this.auditFrom ? this.auditUtcInstant(this.auditFrom) : null;
-        const toAt = this.auditTo ? this.auditUtcInstant(this.auditTo) : null;
+      async fetchAudit(applyFilters = false) {
+        const filters = applyFilters ? {
+          action: this.auditAction, actor: this.auditActor, outcome: this.auditOutcome,
+          from: this.auditFrom, to: this.auditTo
+        } : this.auditAppliedFilters;
+        const fromAt = filters.from ? this.auditUtcInstant(filters.from) : null;
+        const toAt = filters.to ? this.auditUtcInstant(filters.to) : null;
         if (fromAt && toAt && fromAt > toAt)
           throw new Error("The UTC start time must not be later than the end time.");
-        const q = new URLSearchParams({ per_page: "50" });
-        if (this.auditAction) q.set("action", this.auditAction);
-        if (this.auditActor) q.set("actor_id", this.auditActor);
-        if (this.auditOutcome) q.set("outcome", this.auditOutcome);
+        const q = new URLSearchParams({ page: String(this.auditPage), per_page: String(this.auditPerPage) });
+        if (filters.action) q.set("action", filters.action);
+        if (filters.actor) q.set("actor_id", filters.actor);
+        if (filters.outcome) q.set("outcome", filters.outcome);
         if (fromAt) q.set("from", fromAt.toISOString());
         // The API uses an exclusive upper bound; add one second so every event
         // within the chosen ending second (including subsecond timestamps) matches.
         if (toAt) q.set("to", new Date(toAt.getTime() + 1000).toISOString());
         const res = await this.request("GET", apiRoot + "admin/audit_logs?" + q);
+        const total = Number(res.payload.meta?.total) || 0;
+        if (this.auditPage > 1 && this.auditPage > Math.max(1, Math.ceil(total / this.auditPerPage))) {
+          this.auditPage = Math.max(1, Math.ceil(total / this.auditPerPage));
+          return this.fetchAudit(applyFilters);
+        }
         this.audits = res.payload.data || [];
+        this.auditTotal = total;
+        if (applyFilters) this.auditAppliedFilters = filters;
+        return res;
       },
       async loadProducts() {
         if (this.busy) return;
@@ -1253,8 +1412,24 @@
         return this.loadCards();
       },
       async loadCatalog() { await this.execute(() => this.fetchCatalog(), null, "table"); },
+      async changeReportGroup() {
+        if (this.busy || this.tab !== "reports") return;
+        // Do not interpret the previous group's rows as the newly selected group:
+        // brand_id and client_id are distinct fields, not interchangeable.
+        this.reportData = null;
+        this.reportCurrencyFilter = "all";
+        await this.loadReport();
+      },
       async loadReport() { await this.execute(() => this.fetchReport(), "Report loaded.", "table"); },
-      async loadAudit() { await this.execute(() => this.fetchAudit(), "Audit filters applied.", "table"); },
+      async loadAudit() {
+        if (this.busy) return;
+        this.auditPage = 1;
+        await this.execute(() => this.fetchAudit(true), "Audit filters applied.", "table");
+      },
+      openAuditDetails(event) {
+        if (this.busy) return;
+        return this.openDirectoryModal("audit", event);
+      },
       clearAuditFilters() {
         if (this.busy) return;
         this.auditAction = "";
@@ -1262,7 +1437,8 @@
         this.auditOutcome = "";
         this.auditFrom = "";
         this.auditTo = "";
-        return this.execute(() => this.fetchAudit(), "Audit filters cleared.", "table");
+        this.auditPage = 1;
+        return this.execute(() => this.fetchAudit(true), "Audit filters cleared.", "table");
       },
       clearCatalogFilters() {
         this.catalogQuery = "";

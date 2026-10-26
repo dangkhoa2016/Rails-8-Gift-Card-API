@@ -71,7 +71,18 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'aria-label="Brand catalog pagination"', 'v-for="p in productVisiblePages"',
         'changeProductPage(1)', 'changeProductPage(productPage-1)',
         'changeProductPage(productPage+1)', 'changeProductPage(productPageCount)',
-        'v-if="productCatalogPreview"', 'Browse all Brand products'
+        'v-if="productCatalogPreview"', 'Browse all Brand products',
+        "@click.prevent=\"navigateTo('products',p.id)\"",
+        "@click=\"inspect('products',p.id)\"",
+        'v-else-if="directoryModalKind===\'products\'"',
+        'directoryModalRecord.brand_id',
+        'directoryModalRecord.face_value,directoryModalRecord.currency',
+        "directoryModalRecord.deleted_at?'Soft-deleted':directoryModalRecord.state",
+        'directoryModalRecord.custom_fields',
+        "directoryModalKind==='products'?'Product details'"
+      )
+      expect(response.body).not_to include(
+        'v-if="selectedDetail?.kind===\'products\'" class="record-details"'
       )
       expect(response.body).to include(
         'id="card-search"', 'v-model.trim="cardQuery"',
@@ -99,6 +110,8 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'class="report-col-group"',
         'class="report-empty"', 'class="report-raw"',
         'v-model="reportGroup"', 'value="by_brand"', 'value="by_client"',
+        'id="report-group" v-model="reportGroup" :disabled="busy" @change="changeReportGroup"',
+        'id="report-client-group" v-model="reportClientGroup" :disabled="busy" @change="changeReportGroup"',
         'v-model="reportClientGroup"', 'id="report-client-group"',
         'value="currency"', 'value="brand"',
         'Personal spending', 'id="report-currency"',
@@ -119,8 +132,17 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       )
       expect(response.body).to include(
         'class="back-to-top"', 'aria-label="Scroll to top"',
-        'v-show="showBackToTop && !cardModalOpen && !reportDrilldownOpen && !errorModalOpen"',
+        'v-show="showBackToTop && !cardModalOpen && !reportDrilldownOpen && !errorModalOpen && !directoryModalKind"',
         '@click="scrollToTop"'
+      )
+      expect(response.body).to include(
+        'ref="brandsListTop"', 'ref="clientsListTop"', 'ref="auditListTop"',
+        'id="brands-per-page"', 'id="clients-per-page"', 'id="audit-per-page"',
+        'aria-label="Brands pagination"', 'aria-label="Clients pagination"',
+        'aria-label="Audit pagination"', 'openAuditDetails(e)',
+        'class="directory-detail-overlay"', 'class="directory-detail-dialog"',
+        'ref="directoryModalHeading"', '@keydown.tab="trapDirectoryModalFocus"',
+        'directoryModalRecord.actor_email', 'directory-detail-json'
       )
       expect(response.body).to include(
         'class="card-modal-overlay"', 'class="card-detail-modal"',
@@ -202,7 +224,8 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       )
       expect(response.body).to include(
         'reportPreset: "all"', 'reportCurrencyFilter: "all"',
-        'reportCurrencySummaries()', 'reportVisibleRows()',
+        'reportCurrencySummaries()', 'reportVisibleRows()', 'async changeReportGroup()',
+        'this.reportData = null;', 'this.reportCurrencyFilter = "all";',
         'chooseReportPreset(preset)', 'reportCents(value)',
         'reportFormattedCents(cents, currency)', 'reportClientGroup: "currency"',
         'q.set("group_by", this.reportClientGroup)',
@@ -211,7 +234,7 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'this.closeReportDrilldown(false);'
       )
       expect(response.body).to include(
-        "const collections = { brands: this.brands, clients: this.clients, products: this.products }",
+        "const collections = { brands: this.brands, products: this.products,",
         "const existing = collections[kind].find(record => record.id === Number(id))"
       )
       expect(response.body).to include(
@@ -243,8 +266,23 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         "this.grants = this.grants.filter(item => item.id !== g.id)"
       )
       expect(response.body).to include(
+        'brandPage: 1, brandPerPage: 25, brandTotal: 0',
+        'clientPage: 1, clientPerPage: 25, clientTotal: 0',
+        'auditPage: 1, auditPerPage: 25, auditTotal: 0',
+        'changeDirectoryPage(kind, next)', 'changeDirectoryPerPage(kind)',
+        'openDirectoryModal(kind, record)', 'closeDirectoryModal(restoreFocus = true)',
+        'trapDirectoryModalFocus(event)', 'safeAuditFields(data)',
+        'fetchFullAdminDirectory(resource)', 'this.auditAppliedFilters = filters;',
+        'await this.openDirectoryModal(kind, existing);',
+        '["brands", "clients", "products", "audit"].includes(kind)',
+        'if (this.tab === "products") {',
+        'await this.inspect(kind, id);',
+        'await this.openDirectoryModal(kind, record);',
+        '["brands", "clients", "products"].includes(kind) && result'
+      )
+      expect(response.body).to include(
         "auditOutcome: ", "auditFrom: ", "auditTo: ", "auditUtcInstant(value)",
-        'q.set("outcome", this.auditOutcome)', 'q.set("from", fromAt.toISOString())',
+        'q.set("outcome", filters.outcome)', 'q.set("from", fromAt.toISOString())',
         'q.set("to", new Date(toAt.getTime() + 1000).toISOString())', "clearAuditFilters()"
       )
       expect(response.body).to include(
