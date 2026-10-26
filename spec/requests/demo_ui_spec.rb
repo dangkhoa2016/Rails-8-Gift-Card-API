@@ -44,6 +44,14 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'To (UTC, inclusive second)', 'type="datetime-local" step="1"',
         'value="success"', 'value="refused"'
       )
+      expect(response.body).to include(
+        'class="issue-workspace"', 'class="issue-columns"',
+        'id="issue-product-search"', 'v-for="p in matchingIssueProducts"',
+        '@click="issueForm.product_id=p.id"', '@click="createIssueKey"',
+        '@submit.prevent="issueCard"', 'ref="issueResult"',
+        'ref="cardDetails"', 'ref="cardDetailsHeading"',
+        "@click=\"inspect('cards',c.id)\""
+      )
       expect(response.body).not_to include('@submit.prevent="grantAccess"', 'id="access-client-select"')
       expect(response.body).to include(
         "validationErrors.length", "entry.message", "client-email-error",
@@ -81,6 +89,14 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'q.set("outcome", this.auditOutcome)', 'q.set("from", fromAt.toISOString())',
         'q.set("to", new Date(toAt.getTime() + 1000).toISOString())', "clearAuditFilters()"
       )
+      expect(response.body).to include(
+        "selectedIssueProduct()", "matchingIssueProducts()", "createIssueKey()",
+        "async scrollToCardDetails()", "async scrollToIssueResult()",
+        "detail.scrollIntoView(", "result.scrollIntoView(",
+        "await this.scrollToCardDetails()", "issuedHttpStatus: null",
+        'this.issueForm = { product_id: "", key: "", with_pin: false };',
+        'if (result) {', 'await this.scrollToIssueResult()'
+      )
       expect(response.body).not_to include("grantProductId")
       get "/demo/style.css"
       expect(response).to have_http_status(:ok)
@@ -90,6 +106,7 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include(".access-workspace", ".access-columns", ".access-item")
       expect(response.body).to include(".access-client-results", ".access-client-option")
       expect(response.body).to include(".audit-filters", ".audit-filter-actions")
+      expect(response.body).to include(".issue-columns", ".issue-product-choice", ".card-details")
     end
   end
 
