@@ -14,6 +14,12 @@ Set up Ruby 3.4, Rails 8.1, PostgreSQL and dependencies using the root README. I
 
 Open http://localhost:3000/demo (or /demo/index.html). Sign in as admin@example.test or client@example.test using the corresponding locally configured password. No real or demo passwords are embedded in static files.
 
+## Development seed and report validation
+
+Development seeding creates fictional human-readable Brand names such as Aurora Market, Bluebird Market, Cedar Books, Harbor Books and Willow Tech. Rerunning the seed upgrades previous numbered synthetic Brand names **on the same Brand records**, preserving their IDs and all associated Products, Cards, access grants and audit events. Keys are stable and credentials/PINs are never printed.
+
+For meaningful financial grouping, the seed adds 15 Cards distributed across five different USD Brands for the main reviewer Client, plus nine Cards for three distinct synthetic Clients with different payout rates. It calls the actual Cards::Issue and Cards::Cancel application services. As Admin, open **Financial reports**: **By brand** separates multiple Brands in USD; **By client** displays the main Client plus three synthetic Clients. Client reports remain restricted to their own Cards. The original 160 pagination Cards are not reassigned, and repeated seeds do not add Cards or audit events.
+
 ## Admin workflow
 
 1. In **Brands**, create a brand, use **View** to retrieve its details, **Edit** to change its name/state/custom fields, or deactivate/reactivate it. There is intentionally no Brand hard-delete endpoint.
