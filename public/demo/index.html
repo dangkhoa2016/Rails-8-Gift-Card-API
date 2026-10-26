@@ -334,9 +334,30 @@
         <details><summary>Raw report JSON</summary><pre class="response-pre">{{pretty(reportData)}}</pre></details>
       </section>
 
-      <section v-if="tab==='audit'" class="panel"><span class="kicker">AUDIT LEDGER</span><h2>Admin audit logs</h2><div class="filters"><label>Action<input v-model.trim="auditAction" placeholder="card.issued"></label><label>Actor (Client)<select v-model="auditActor"><option value="">All users</option><option v-for="c in clients" :key="c.id" :value="c.id">{{c.email}}</option></select></label><button :class="['btn','primary',{processing:submitting}]" @click="loadAudit" :disabled="busy">Apply</button></div><div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>UTC time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Record</th></tr></thead><tbody><tr v-for="e in audits" :key="e.id"><td>{{e.occurred_at}}</td><td><a v-if="canOpenAuditActor(e)" class="entity-link" :href="entityHref('clients',e.actor_id)" @click.prevent="navigateTo('clients',e.actor_id)">{{e.actor_email}}</a>
-            <strong v-else>{{e.actor_email||'Unknown / system'}}</strong><small v-if="e.actor_id">User ID: {{e.actor_id}}</small></td><td class="mono">{{e.action}}</td><td>{{e.outcome}}</td><td><a v-if="auditEntity(e)" class="entity-link" :href="entityHref(auditEntity(e).kind,auditEntity(e).id)" @click.prevent="navigateTo(auditEntity(e).kind,auditEntity(e).id)">{{auditRecordLabel(e)}}</a>
-            <strong v-else>{{auditRecordLabel(e)}}</strong><small v-if="e.record_id">{{e.record_type}} ID: {{e.record_id}}</small></td></tr><tr v-if="!audits.length"><td class="empty" colspan="5">No matching audit events</td></tr></tbody></table></div><p class="help">Showing up to 50 events. PINs and passwords are not included.</p></section>
+      <section v-if="tab==='audit'" class="panel audit-workspace">
+        <div class="audit-heading"><div><span class="kicker">AUDIT LEDGER</span><h2>Admin audit logs <em>{{audits.length}}</em></h2>
+          <p class="muted">Filter audit events by actor, action, outcome and exact UTC time down to the second. Filters run on the server before pagination.</p></div></div>
+        <form class="audit-filters" @submit.prevent="loadAudit" aria-label="Audit log filters">
+          <label>Action<input v-model.trim="auditAction" placeholder="e.g. card.issued" :disabled="busy"></label>
+          <label>Actor (Client)<select v-model="auditActor" :disabled="busy"><option value="">All users</option><option v-for="c in clients" :key="c.id" :value="c.id">{{c.email}}</option></select></label>
+          <label>Outcome<select v-model="auditOutcome" :disabled="busy"><option value="">All outcomes</option><option value="success">Success</option><option value="refused">Refused</option></select></label>
+          <label>From (UTC, inclusive)<input type="datetime-local" step="1" v-model="auditFrom" :max="auditTo||undefined" :disabled="busy" aria-label="Start UTC date, hour, minute and second"></label>
+          <label>To (UTC, inclusive second)<input type="datetime-local" step="1" v-model="auditTo" :min="auditFrom||undefined" :disabled="busy" aria-label="End UTC date, hour, minute and second"></label>
+          <div class="audit-filter-actions"><button type="submit" :class="['btn','primary',{processing:submitting}]" :disabled="busy">Apply filters</button>
+            <button type="button" class="btn outline" :disabled="busy" @click="clearAuditFilters">Clear all</button></div>
+        </form>
+        <div class="audit-filter-note"><span>Enter dates and HH:MM:SS in UTC (not local time). Both selected seconds are included; leave either field blank for an open-ended range.</span>
+          <span>Latest 50 matching events</span></div>
+        <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>UTC time</th><th>Actor</th><th>Action</th><th>Outcome</th><th>Record</th></tr></thead><tbody>
+          <tr v-for="e in audits" :key="e.id"><td class="mono">{{e.occurred_at}}</td><td><a v-if="canOpenAuditActor(e)" class="entity-link" :href="entityHref('clients',e.actor_id)" @click.prevent="navigateTo('clients',e.actor_id)">{{e.actor_email}}</a>
+            <strong v-else>{{e.actor_email||'Unknown / system'}}</strong><small v-if="e.actor_id">User ID: {{e.actor_id}}</small></td>
+            <td class="mono">{{e.action}}</td><td><span :class="['pill',e.outcome==='success'?'active':'inactive']">{{e.outcome}}</span></td>
+            <td><a v-if="auditEntity(e)" class="entity-link" :href="entityHref(auditEntity(e).kind,auditEntity(e).id)" @click.prevent="navigateTo(auditEntity(e).kind,auditEntity(e).id)">{{auditRecordLabel(e)}}</a>
+              <strong v-else>{{auditRecordLabel(e)}}</strong><small v-if="e.record_id">{{e.record_type}} ID: {{e.record_id}}</small></td></tr>
+          <tr v-if="!audits.length"><td class="empty" colspan="5">No audit events match these filters. Adjust the date range or outcome and try again.</td></tr>
+        </tbody></table></div>
+        <p class="help">Showing up to 50 matching events. PINs and passwords are not included. Use the API Console for additional pages.</p>
+      </section>
 
       <section v-if="tab==='console'" class="two-col console">
         <div class="panel"><span class="kicker">LIVE API REQUEST</span><h2>HTTP console</h2><p class="muted">Only same-origin <code>/api/v1/</code> paths are permitted; authentication uses the in-memory session JWT.</p>

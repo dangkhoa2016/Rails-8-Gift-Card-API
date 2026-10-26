@@ -56,7 +56,7 @@
         issueForm: { product_id: "", key: "", with_pin: false },
         issued: null,
         reportFrom: "", reportTo: "", reportGroup: "by_brand", reportData: null,
-        auditAction: "", auditActor: "",
+        auditAction: "", auditActor: "", auditOutcome: "", auditFrom: "", auditTo: "",
         consoleForm: { method: "GET", path: "/api/v1/client/catalog", body: "", key: "" },
         response: { method: "", path: "", body: { message: "Send a request to inspect the response." }, status: null, duration: "—" }
       };
@@ -361,6 +361,8 @@
         this.loginForm.password = "";
         this.consoleForm.body = "";
         this.consoleForm.key = "";
+        this.auditAction = ""; this.auditActor = ""; this.auditOutcome = "";
+        this.auditFrom = ""; this.auditTo = "";
         this.response = { method: "", path: "", body: null, status: null, duration: "—" };
         this.tab = "overview";
       },
@@ -487,10 +489,32 @@
         const res = await this.request("GET", apiRoot + route + (q.size ? "?" + q : ""));
         this.reportData = res.payload;
       },
+      auditUtcInstant(value) {
+        // datetime-local has no timezone: interpret its wall-clock fields as UTC,
+        // not as the browser's local timezone. Missing seconds mean :00.
+        const normalized = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}$/.test(value)
+          ? value + ":00" : value;
+        if (!/^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}$/.test(normalized))
+          throw new Error("Enter a complete UTC date and time (hours, minutes and seconds).");
+        const timestamp = new Date(normalized + "Z");
+        if (Number.isNaN(timestamp.getTime()) ||
+          timestamp.toISOString().slice(0, 19) !== normalized)
+          throw new Error("Enter a valid UTC date and time.");
+        return timestamp;
+      },
       async fetchAudit() {
+        const fromAt = this.auditFrom ? this.auditUtcInstant(this.auditFrom) : null;
+        const toAt = this.auditTo ? this.auditUtcInstant(this.auditTo) : null;
+        if (fromAt && toAt && fromAt > toAt)
+          throw new Error("The UTC start time must not be later than the end time.");
         const q = new URLSearchParams({ per_page: "50" });
         if (this.auditAction) q.set("action", this.auditAction);
         if (this.auditActor) q.set("actor_id", this.auditActor);
+        if (this.auditOutcome) q.set("outcome", this.auditOutcome);
+        if (fromAt) q.set("from", fromAt.toISOString());
+        // The API uses an exclusive upper bound; add one second so every event
+        // within the chosen ending second (including subsecond timestamps) matches.
+        if (toAt) q.set("to", new Date(toAt.getTime() + 1000).toISOString());
         const res = await this.request("GET", apiRoot + "admin/audit_logs?" + q);
         this.audits = res.payload.data || [];
       },
@@ -522,6 +546,15 @@
       async loadCatalog() { await this.execute(() => this.fetchCatalog(), null, "table"); },
       async loadReport() { await this.execute(() => this.fetchReport(), "Report loaded.", "table"); },
       async loadAudit() { await this.execute(() => this.fetchAudit(), "Audit filters applied.", "table"); },
+      clearAuditFilters() {
+        if (this.busy) return;
+        this.auditAction = "";
+        this.auditActor = "";
+        this.auditOutcome = "";
+        this.auditFrom = "";
+        this.auditTo = "";
+        return this.execute(() => this.fetchAudit(), "Audit filters cleared.", "table");
+      },
       clearCatalogFilters() {
         this.catalogQuery = "";
         this.catalogCurrency = "";
