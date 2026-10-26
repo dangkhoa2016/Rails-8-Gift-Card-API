@@ -148,3 +148,14 @@ input[aria-invalid="true"]:focus{box-shadow:0 0 0 3px #d54c5b25}
 .access-footer-note{font-size:11px;color:#8797ac;margin:0 4px 9px;line-height:1.55}
 @media(max-width:1300px){.access-columns{grid-template-columns:1fr}.access-panel>.muted{min-height:0}}
 @media(max-width:710px){.access-client-controls,.access-filters,.access-overview{grid-template-columns:1fr}.access-client-panel,.access-panel{padding:19px}.access-client-context .entity-link{width:100%}.access-intro h2{font-size:20px}.access-item{flex-wrap:wrap}.access-item .btn{margin-left:33px}.access-overview{gap:9px}}
+
+/* Audit log filters: explicit UTC second-precision range and outcome, server-filtered. */
+.audit-heading .muted{max-width:720px;margin-bottom:14px}
+.audit-filters{display:grid;grid-template-columns:minmax(145px,1.3fr) minmax(160px,1.4fr) minmax(125px,1fr) minmax(200px,1.35fr) minmax(200px,1.35fr);align-items:end;gap:12px}
+.audit-filters label{min-width:0}
+.audit-filter-actions{grid-column:1/-1;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+.audit-filter-note{display:flex;gap:10px;justify-content:space-between;flex-wrap:wrap;margin:14px 0 0;font-size:11px;color:#71859d;line-height:1.6}
+.audit-workspace .scroll{margin-top:18px}
+@media(max-width:1280px){.audit-filters{grid-template-columns:repeat(3,minmax(0,1fr))}}
+@media(max-width:710px){.audit-filters{grid-template-columns:1fr 1fr}.audit-filters label:nth-child(-n+3){grid-column:1/-1}.audit-filter-actions .btn{flex:1}}
+@media(max-width:390px){.audit-filters{grid-template-columns:1fr}.audit-filters label{grid-column:1/-1}}
