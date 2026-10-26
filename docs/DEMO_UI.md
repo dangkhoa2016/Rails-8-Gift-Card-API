@@ -40,6 +40,12 @@ For meaningful financial grouping, the seed adds 15 Cards distributed across fiv
 
 The API console supports GET, POST, PATCH and DELETE for same-origin /api/v1/ endpoints only. It sends JSON objects, accepts an optional Idempotency-Key header, and displays HTTP status, duration and raw JSON. See API_EXAMPLES.md for example requests.
 
+## Financial reports: traceable Card drill-down
+
+Issued and Cancelled counts in each reporting row are accessible buttons. Select a number to open a read-only, paginated Card records dialog showing activation number, Card ID, Product, Brand, face-value/payout snapshots, current status and event timestamp. Admin also sees the owning Client. First/Previous/Next/Last navigate matching events without downloading the entire list. The dialog is keyboard accessible and closes via Escape, X, Close or backdrop while preserving the original report and scroll position.
+
+The optional read-only endpoints are GET /api/v1/client/reports/cards and GET /api/v1/admin/reports/cards, accepting currency, event=issued|cancelled, UTC from/to, page and per_page (max 100). Client requests are always scoped to current_user.cards, optionally narrowed by brand_id; forged client_id is rejected. Admin requests require group_by=brand&brand_id=... or group_by=client&client_id=..., never an unrestricted list. The same half-open event-time rules as the SQL financial report apply before server-side pagination: Issued means issued_at in the range, even if subsequently cancelled; Cancelled means cancelled_at in range. Current status is shown separately so it cannot be confused with the historical event. PINs, encrypted PINs, passwords and idempotency data are never returned; revealing PIN is still restricted to the password-confirmed Client workflow. An event count mismatch from a concurrent update is visibly explained.
+
 ## Financial reports: human-readable dashboard
 
 The event-time ledger calculation and financial snapshots are unchanged. **Admin** sees **Financial reports** with the existing **By brand / By client** options. **Client** sees **Personal spending** with **By currency / By brand**. The Client **By brand** choice sends GET /api/v1/client/reports/spending?group_by=brand, restricted to that authenticated Client's own Cards. A Client cannot group across other Clients or open Admin-only Brand screens. The original currency-only response remains the default when group_by is omitted. Unsupported grouping returns 422 invalid_filter. Group names are returned as read-only labels for clarity.
