@@ -56,6 +56,15 @@ curl -sS -X POST http://localhost:3000/api/v1/client/cards \
   -H 'Content-Type: application/json' \
   -d '{"product_id":PRODUCT_ID,"with_pin":true}'
 
+# Filter My cards by PIN presence (without returning the PIN itself).
+# has_pin=true: PIN exists; has_pin=false: no PIN; omit for all cards.
+# Filters combine with status and are applied before pagination.
+curl -sS -G http://localhost:3000/api/v1/client/cards \
+  -H "Authorization: Bearer $CLIENT_TOKEN" \
+  --data-urlencode 'has_pin=true' \
+  --data-urlencode 'status=issued' \
+  --data-urlencode 'per_page=25'
+
 # Repeat the same issue request with the same Idempotency-Key and JSON.
 # Expect HTTP 200 and the SAME card ID, not a new card.
 
@@ -99,3 +108,18 @@ curl -sS -G http://localhost:3000/api/v1/admin/audit_logs \
 ```
 
 These date ranges use UTC and include `from` but exclude `to`. JSON money values are decimal strings. Each report is grouped by currency.
+
+### Client: Reveal an owned Card PIN with password confirmation
+
+```bash
+# Password must be the currently signed-in Client's password, not an Admin password.
+# Supply this through a protected interactive environment, not a shell history entry.
+curl -sS -X POST http://localhost:3000/api/v1/client/cards/CARD_ID/reveal_pin \
+  -H "Authorization: Bearer $CLIENT_TOKEN" \
+  -H 'Content-Type: application/json' \
+  --data-binary @- <<'JSON'
+{"password":"<CLIENT_PASSWORD>"}
+JSON
+```
+
+The example password is only a placeholder. The endpoint returns a PIN only after ownership and fresh password verification; it sets a `no-store` response, audits the attempt without sensitive values, and throttles repeated incorrect passwords. Do not save the real password or returned PIN in shell history, logs, screenshots, or public documentation.

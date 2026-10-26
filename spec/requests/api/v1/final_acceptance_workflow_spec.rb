@@ -68,7 +68,8 @@ RSpec.describe "WOGI business acceptance workflow", type: :request do
 
     get "/api/v1/client/cards/#{card_id}", headers: client_headers
     expect(response).to have_http_status(:ok)
-    expect(response.body).not_to include(issued.fetch("pin"), "pin")
+    expect(response.body).not_to include(issued.fetch("pin"), '"pin":')
+    expect(response.parsed_body.fetch("data").fetch("has_pin")).to be(true)
 
     from = Time.current.utc.to_date.iso8601
     to = (Time.current.utc.to_date + 1).iso8601

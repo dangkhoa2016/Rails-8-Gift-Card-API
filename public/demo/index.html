@@ -340,38 +340,66 @@
             <p class="muted">{{issuedHttpStatus===200?'HTTP 200 · Safe idempotent replay; no duplicate card was created.':'HTTP 201 · A new gift card was created.'}}</p></div>
             <span :class="['issue-response-status',{replay:issuedHttpStatus===200}]">HTTP {{issuedHttpStatus}}</span></div>
           <div class="issue-result-layout"><div class="gift-card"><small>ACTIVATION NUMBER</small><strong>{{issued.activation_number}}</strong>
-            <div>{{money(issued.face_value_snapshot,issued.currency_snapshot)}} · {{issued.status}}</div><div class="pin" v-if="issued.pin">PIN: {{issued.pin}}</div></div>
+            <div>{{money(issued.face_value_snapshot,issued.currency_snapshot)}} · {{issued.status}}</div><div class="pin issue-pin-display" v-if="issued.pin"><span>PIN: <strong class="mono">{{issuedPinVisible?issued.pin:'••••••'}}</strong></span>
+              <button type="button" class="pin-toggle" :aria-label="issuedPinVisible?'Hide issued PIN':'Reveal issued PIN'"
+                @click="issuedPinVisible?hideIssuedPin():showIssuedPin()">{{issuedPinVisible?'Hide PIN':'Reveal PIN'}}</button></div></div>
             <div class="issue-result-details"><div><span>Product</span><strong>{{issued.product_name}}</strong></div><div><span>Brand</span><strong>{{issued.brand_name}}</strong></div>
               <div><span>Card ID</span><strong>#{{issued.id}}</strong></div><div><span>Payout</span><strong>{{money(issued.payout_amount_snapshot,issued.currency_snapshot)}}</strong></div>
               <button class="btn outline" type="button" :disabled="busy" @click="navigateTo('cards',issued.id)">View in My cards →</button></div></div>
-          <p class="help">PINs are not included in later GET card responses and are cleared when you sign out. Do not share screenshots containing a PIN.</p>
+          <p class="help">The PIN is hidden by default and automatically hidden 30 seconds after Reveal. Card list/detail GET endpoints never include it. Avoid sharing screenshots of a revealed PIN.</p>
         </div>
         <div v-else class="issue-result-placeholder" role="status">Your latest issuance result will appear below the form after a successful request.</div>
       </section>
 
       <section v-if="tab==='cards'" class="panel"><span class="kicker">CARD LIFECYCLE</span><h2>My cards <em>{{cards.length}}</em></h2>
-        <div class="filters"><label>Status<select v-model="cardStatus" @change="loadCards"><option value="">All</option>
-          <option value="issued">Issued</option><option value="cancelled">Cancelled</option></select></label></div>
-        <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>Gift card</th><th>Product / Brand</th><th>Face value</th><th>Payout</th><th>Status</th><th>Actions</th></tr></thead><tbody>
+        <div class="card-filter-bar" aria-label="Card filters">
+          <label class="card-status-filter">Status<select v-model="cardStatus" @change="loadCards" :disabled="busy"><option value="">All statuses</option>
+            <option value="issued">Issued</option><option value="cancelled">Cancelled</option></select></label>
+          <fieldset class="card-pin-filters"><legend>PIN availability</legend><div class="card-pin-options">
+            <label class="card-pin-option"><input type="checkbox" :checked="cardPinFilter==='with'" @change="toggleCardPinFilter('with')" :disabled="busy"> With PIN</label>
+            <label class="card-pin-option"><input type="checkbox" :checked="cardPinFilter==='without'" @change="toggleCardPinFilter('without')" :disabled="busy"> Without PIN</label>
+          </div></fieldset>
+          <button class="btn outline card-clear-filters" type="button" :disabled="busy" @click="clearCardFilters">Clear filters</button>
+        </div>
+        <p class="card-filter-note">Choose one checkbox to filter by PIN availability. Neither selected = all cards. PIN values are never shown in this list.</p>
+        <div :class="['scroll',{'is-loading':loadingTable}]"><table><thead><tr><th>Gift card</th><th>Product / Brand</th><th>Face value</th><th>Payout</th><th>Status</th><th>PIN</th><th>Actions</th></tr></thead><tbody>
         <tr v-for="c in cards" :key="c.id"><td><a class="entity-link mono" :href="entityHref('cards',c.id)" @click.prevent="navigateTo('cards',c.id)">{{c.activation_number}}</a><small>Card ID: {{c.id}}</small></td>
           <td><strong>{{c.product_name}}</strong><small>{{c.brand_name}}</small></td>
           <td>{{money(c.face_value_snapshot,c.currency_snapshot)}}</td>
           <td>{{money(c.payout_amount_snapshot,c.currency_snapshot)}}</td>
           <td><span :class="['pill',c.status==='issued'?'active':'inactive']">{{c.status}}</span></td>
+          <td><span :class="['card-pin-badge',{'has-pin':c.has_pin}]">{{c.has_pin?'Enabled':'None'}}</span></td>
           <td><div class="table-actions"><button class="text-btn" :disabled="busy" @click="inspect('cards',c.id)">View</button>
             <button class="text-btn dangerous" @click="cancelCard(c)" :disabled="busy||c.status!=='issued'">Cancel</button></div></td></tr>
-        <tr v-if="!cards.length"><td colspan="6" class="empty">No cards found</td></tr>
+        <tr v-if="!cards.length"><td colspan="7" class="empty">No cards match the selected filters.</td></tr>
         </tbody></table></div>
         <div class="record-details card-details" ref="cardDetails" v-if="cardDetail" role="region" aria-label="Selected gift card details">
           <div class="card-details-heading"><h3 ref="cardDetailsHeading" tabindex="-1">Gift card details</h3><span :class="['pill',cardDetail.status==='issued'?'issued':'cancelled']">{{cardDetail.status}}</span></div><dl>
           <dt>Product</dt><dd>{{cardDetail.product_name}}</dd><dt>Brand</dt><dd>{{cardDetail.brand_name}}</dd>
           <dt>Activation</dt><dd class="mono">{{cardDetail.activation_number}}</dd>
+          <dt>PIN availability</dt><dd class="card-pin-detail"><span :class="['card-pin-badge',{'has-pin':cardDetail.has_pin}]">{{cardDetail.has_pin?'Enabled':'None'}}</span>
+            <template v-if="cardDetail.has_pin">
+              <div v-if="revealedCardPin" class="card-pin-revealed" role="status" aria-live="polite">
+                <span>PIN: <strong class="mono">{{revealedCardPin}}</strong></span>
+                <button class="btn outline small" type="button" @click="hideCardPin">Hide PIN</button>
+                <small>Automatically hidden after 30 seconds</small>
+              </div>
+              <form v-else class="card-pin-reveal-form" @submit.prevent="revealCardPin">
+                <label>Confirm your Client password
+                  <input ref="pinPasswordInput" type="password" required autocomplete="off" maxlength="128"
+                    :disabled="busy" placeholder="Enter account password" :aria-invalid="!!pinRevealError"
+                    :aria-describedby="pinRevealError?'pin-reveal-error':undefined" @input="pinRevealError=''"></label>
+                <small v-if="pinRevealError" id="pin-reveal-error" class="field-error pin-reveal-error" role="alert">{{pinRevealError}}</small>
+                <button class="btn outline small" type="submit" :disabled="busy">Reveal PIN</button>
+                <small>Password confirmation is required. Only you can reveal your Card's PIN.</small>
+              </form>
+            </template></dd>
           <dt>Face value</dt><dd>{{money(cardDetail.face_value_snapshot,cardDetail.currency_snapshot)}}</dd>
           <dt>Rate snapshot</dt><dd>{{cardDetail.payout_rate_snapshot}}%</dd>
           <dt>Payout snapshot</dt><dd>{{money(cardDetail.payout_amount_snapshot,cardDetail.currency_snapshot)}}</dd>
           <dt>Issued at</dt><dd>{{cardDetail.issued_at}}</dd>
           <dt>Cancelled at</dt><dd>{{cardDetail.cancelled_at||'Not cancelled'}}</dd>
-        </dl><p class="help">PIN is never returned by the card detail endpoint.</p></div>
+        </dl><p class="help">Regular Card details only return PIN availability. Reveal PIN requires your account password, is audited and rate-limited; the PIN is automatically hidden after 30 seconds.</p></div>
         <p class="help">Displays up to 100 most recent cards; details and associations come from the real Rails API.</p>
       </section>
 
