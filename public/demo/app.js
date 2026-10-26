@@ -149,6 +149,7 @@
         directoryModalKind: null, directoryModalRecord: null,
         directoryModalTrigger: null, directoryModalPreviousOverflow: "",
         accessClientQuery: "", accessPickerOpen: false, accessProductQuery: "", accessGrantQuery: "",
+        accessGrantsLoadedClientId: null, accessProductsLoadedBrandId: null,
         editingBrandId: null, editingProductId: null, editingClientId: null,
         selectedDetail: null, cardDetail: null, cardModalOpen: false, cardModalTrigger: null,
         cardModalPreviousOverflow: "", catalogQuery: "", catalogCurrency: "",
@@ -278,12 +279,16 @@
           (this.reportAppliedTo || "Present") + " (end excluded, UTC)";
       },
       accessClient() { return this.clients.find(c => c.id === Number(this.clientId)) || null; },
+      accessGrantsReady() { return this.accessGrantsLoadedClientId === Number(this.clientId); },
+      accessProductsReady() { return this.accessProductsLoadedBrandId === Number(this.brandId); },
       matchingAccessClients() {
         const q = this.accessClientQuery.trim().toLowerCase();
         return this.clients.filter(c => c.email.toLowerCase().includes(q))
           .sort((a, b) => a.email.localeCompare(b.email));
       },
       availableAccessProducts() {
+        // Never offer Grant based on a truncated or failed permissions fetch.
+        if (this.tab === "grants" && (!this.accessGrantsReady || !this.accessProductsReady)) return [];
         const granted = new Set(this.grants.map(g => Number(g.product_id)));
         const q = this.accessProductQuery.trim().toLowerCase();
         return this.products.filter(p => !p.deleted_at && !granted.has(p.id) &&
@@ -429,6 +434,32 @@
           if (attributes.client_id) return { kind: "grants", id: attributes.client_id };
         }
         return null; // Admin has no card detail endpoint; do not render a broken link.
+      },
+      async openAccessDetails(kind, rawId) {
+        // Product access uses read-only details without changing its selected Client,
+        // Brand, filters or scroll position.
+        if (this.tab !== "grants" || this.busy || this.session?.user?.role !== "admin" ||
+            !["products", "brands", "clients"].includes(kind)) return;
+        const id = Number(rawId);
+        if (!Number.isSafeInteger(id) || id <= 0) return;
+        let record = this[kind].find(item => item.id === id);
+        if (!record) {
+          // A grant may refer to a Product outside the currently loaded Brand.
+          const response = await this.execute(
+            () => this.request("GET", apiRoot + "admin/" + kind + "/" + id), null, "detail");
+          if (!response || this.tab !== "grants") return;
+          record = response.payload.data;
+        }
+        if (this.directoryModalKind) {
+          // Following Product -> Brand inside the dialog retains its original
+          // trigger and body-scroll lock for correct focus/scroll restoration.
+          this.directoryModalKind = kind;
+          this.directoryModalRecord = record;
+          await this.$nextTick();
+          this.$refs.directoryModalHeading?.focus({ preventScroll: true });
+        } else {
+          await this.openDirectoryModal(kind, record);
+        }
       },
       async navigateTo(kind, rawId) {
         if (this.busy || !this.session) return;
@@ -910,6 +941,7 @@
         this.cardDetail = null;
         this.editingBrandId = this.editingProductId = this.editingClientId = null;
         this.brands = []; this.products = []; this.clients = []; this.grants = [];
+        this.accessGrantsLoadedClientId = null; this.accessProductsLoadedBrandId = null;
         this.clientId = ""; this.accessClientQuery = ""; this.accessPickerOpen = false;
         this.accessProductQuery = ""; this.accessGrantQuery = "";
         this.catalog = []; this.issueCatalog = []; this.cards = []; this.audits = [];
@@ -1009,7 +1041,16 @@
           // Re-entering Console uses a safe read-only example for the current role.
           this.applyConsoleTemplate(this.session.user.role === "admin" ? "admin-brands" : "client-catalog");
         }
-        if (section === "grants") this.accessPickerOpen = false;
+        if (section === "grants") {
+          // Every Product access visit starts with empty STEP 02 filters,
+          // including sidebar re-entry and deep links from the Clients directory.
+          // Keep the explicitly targeted Client and its granted permissions.
+          this.brandId = "";
+          this.accessProductQuery = "";
+          this.products = [];
+          this.accessProductsLoadedBrandId = null;
+          this.accessPickerOpen = false;
+        }
         this.validationErrors = [];
         this.tab = section;
         this.selectedDetail = null;
@@ -1046,19 +1087,22 @@
         }, null, "table");
       },
       async fetchFullAdminDirectory(resource) {
-        // Related Admin selectors are loaded fully, independently of pagination.
+        // All-pages loader for Admin selectors and nested Product access collections.
+        // Keep directory/Brand Catalog pagination independent from these results.
         const root = apiRoot + "admin/" + resource;
         const params = new URLSearchParams({ page: "1", per_page: "100" });
         const first = await this.request("GET", root + "?" + params);
         const records = [...(first.payload.data || [])];
-        const total = Number(first.payload.meta?.total) || records.length;
-        for (let page = 2; records.length < total; page++) {
+        const total = Number(first.payload.meta?.total);
+        if (!Number.isSafeInteger(total) || total < 0)
+          throw new Error("Missing pagination total for " + resource + ". Refresh to retry.");
+        for (let page = 2; page <= Math.ceil(total / 100); page++) {
           params.set("page", String(page));
           const response = await this.request("GET", root + "?" + params);
-          const next = response.payload.data || [];
-          if (!next.length) break;
-          records.push(...next);
+          records.push(...(response.payload.data || []));
         }
+        if (records.length !== total || new Set(records.map(item => item.id)).size !== total)
+          throw new Error("The full " + resource + " list could not be loaded. Refresh to retry.");
         return { data: records, meta: { total } };
       },
       async fetchBrands() {
@@ -1075,20 +1119,31 @@
         }
         this.brands = res.payload.data || [];
         if (directory) this.brandTotal = total;
-        if (!directory && !this.brands.some(b => b.id === Number(this.brandId))) this.brandId = this.brands[0]?.id || "";
+        if (!directory && !this.brands.some(b => b.id === Number(this.brandId)))
+          this.brandId = this.tab === "grants" ? "" : (this.brands[0]?.id || "");
         if (!this.editingProductId && !this.brands.some(b => b.id === Number(this.productForm.brand_id)))
           this.productForm.brand_id = this.brands[0]?.id || "";
         return res;
       },
       async fetchProducts() {
+        if (this.tab === "grants") this.accessProductsLoadedBrandId = null;
         if (!this.brandId) {
           this.products = [];
           if (this.tab === "products") this.productTotal = 0;
           return;
         }
-        // Product Access keeps its existing independent 100-record loader.
-        // Only Brand Catalog uses this dedicated server-side pagination state.
+        // Product access needs all Brand Products; Brand Catalog keeps its
+        // existing independent server-side pagination and page selection.
         const catalog = this.tab === "products";
+        if (!catalog) {
+          const brandId = Number(this.brandId);
+          const payload = await this.fetchFullAdminDirectory(
+            "brands/" + encodeURIComponent(brandId) + "/products");
+          if (this.tab !== "grants" || Number(this.brandId) !== brandId) return;
+          this.products = payload.data;
+          this.accessProductsLoadedBrandId = brandId;
+          return { payload };
+        }
         const perPage = catalog ? this.productPerPage : 100;
         const page = catalog ? this.productPage : 1;
         const q = new URLSearchParams({ page: String(page), per_page: String(perPage) });
@@ -1126,10 +1181,16 @@
         return res;
       },
       async fetchGrants() {
+        this.accessGrantsLoadedClientId = null;
         this.grants = [];
         if (!this.clientId) return;
-        const res = await this.request("GET", apiRoot + "admin/clients/" + encodeURIComponent(this.clientId) + "/product_accesses?per_page=100");
-        this.grants = res.payload.data || [];
+        const clientId = Number(this.clientId);
+        const payload = await this.fetchFullAdminDirectory(
+          "clients/" + encodeURIComponent(clientId) + "/product_accesses");
+        if (this.tab !== "grants" || Number(this.clientId) !== clientId) return;
+        this.grants = payload.data;
+        this.accessGrantsLoadedClientId = clientId;
+        return { payload };
       },
       async fetchCatalog() {
         const params = new URLSearchParams();
@@ -1557,13 +1618,20 @@
       },
       async grantAccess(product) {
         if (!this.clientId || !product || product.deleted_at ||
+          this.accessGrantsLoadedClientId !== Number(this.clientId) ||
+          this.accessProductsLoadedBrandId !== Number(this.brandId) ||
           this.grants.some(g => Number(g.product_id) === product.id)) return;
-        await this.execute(async () => {
+        const outcome = await this.execute(async () => {
           const result = await this.request("POST", apiRoot + "admin/clients/" +
             encodeURIComponent(this.clientId) + "/product_accesses", { product_id: product.id });
           // POST returns the authoritative grant with human-readable associations.
           this.grants = [...this.grants, result.payload.data];
         }, "Access granted to " + product.name + ".");
+        if (outcome === null) {
+          // A failed Grant displays its error at the page header.
+          await this.$nextTick();
+          this.scrollToTop();
+        }
       },
       async revokeAccess(g) {
         if (!this.clientId || !this.grants.some(item => item.id === g.id)) return;
