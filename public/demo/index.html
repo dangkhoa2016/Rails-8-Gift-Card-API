@@ -538,8 +538,18 @@
                   <strong v-else>{{reportGroupLabel(record)}}</strong>
                 </td>
                 <td class="report-col-currency"><strong class="report-table-currency">{{record.currency}}</strong></td>
-                <td class="report-col-count report-numeric">{{reportInteger(record.issued_count)}}</td>
-                <td class="report-col-count report-numeric">{{reportInteger(record.cancelled_count)}}</td>
+                <td class="report-col-count report-numeric">
+                  <button v-if="Number(record.issued_count)>0" type="button" class="report-drilldown-link"
+                    :disabled="busy" :aria-label="'View '+record.issued_count+' issued '+record.currency+' cards'"
+                    @click="openReportCards(record,'issued')">{{reportInteger(record.issued_count)}} <span aria-hidden="true">↗</span></button>
+                  <span v-else>0</span>
+                </td>
+                <td class="report-col-count report-numeric">
+                  <button v-if="Number(record.cancelled_count)>0" type="button" class="report-drilldown-link"
+                    :disabled="busy" :aria-label="'View '+record.cancelled_count+' cancelled '+record.currency+' cards'"
+                    @click="openReportCards(record,'cancelled')">{{reportInteger(record.cancelled_count)}} <span aria-hidden="true">↗</span></button>
+                  <span v-else>0</span>
+                </td>
                 <td class="report-col-money report-numeric report-net">{{reportMoney(record.net_spending,record.currency)}}</td>
                 <td class="report-col-money report-numeric report-net">{{reportMoney(record.net_payout_activity,record.currency)}}</td>
                 <td class="report-col-breakdown"><details class="report-breakdown"><summary>View figures</summary><dl>
@@ -657,6 +667,76 @@
       </div>
       <footer class="card-modal-footer">
         <button type="button" class="btn outline" @click="closeCardDetails()">Close</button>
+      </footer>
+    </section>
+  </div>
+  <div v-if="reportDrilldownOpen && reportDrilldownSelection && tab==='reports'"
+       class="report-drilldown-overlay" @click.self="closeReportDrilldown()"
+       @keydown.esc.stop.prevent="closeReportDrilldown()"
+       @keydown.tab="trapReportDrilldownFocus">
+    <section class="report-drilldown-dialog" ref="reportDrilldownDialog" role="dialog" aria-modal="true"
+             aria-labelledby="report-drilldown-title" aria-describedby="report-drilldown-desc">
+      <header class="report-drilldown-header">
+        <div>
+          <span class="kicker">REPORT EVIDENCE · READ ONLY</span>
+          <h2 id="report-drilldown-title" tabindex="-1" ref="reportDrilldownHeading">
+            {{reportDrilldownSelection.event==='issued'?'Issued':'Cancelled'}} Gift cards · {{reportDrilldownSelection.currency}}
+          </h2>
+          <p id="report-drilldown-desc">{{reportDrilldownSelection.groupLabel}} ·
+            {{reportDrilldownSelection.from||'Beginning'}} to
+            {{reportDrilldownSelection.to||'Present'}} (end excluded, UTC)</p>
+        </div>
+        <button type="button" class="card-modal-close" aria-label="Close report Card list"
+                @click="closeReportDrilldown()">×</button>
+      </header>
+      <div class="report-drilldown-body" ref="reportDrilldownBody">
+        <div class="report-drilldown-summary">
+          <span><strong>{{reportDrilldownTotal}}</strong> matching Card records</span>
+          <span>Showing {{reportDrilldownFirst}}–{{reportDrilldownLast}}</span>
+        </div>
+        <p v-if="reportDrilldownTotal!==reportDrilldownSelection.expected && !loadingTable"
+           class="report-drilldown-note" role="status">
+          The report showed {{reportDrilldownSelection.expected}} events when it was loaded.
+          The live list now contains {{reportDrilldownTotal}}. Run report again to refresh its totals.
+        </p>
+        <p class="report-drilldown-note">Each row represents one
+          {{reportDrilldownSelection.event==='issued'?'issuance':'cancellation'}} event.
+          A Card issued in this period may have been cancelled later; its current status is shown separately.</p>
+        <div :class="['report-drilldown-scroll',{'is-loading':loadingTable}]">
+          <table class="report-drilldown-table">
+            <thead><tr><th>Activation</th><th>Product / Brand</th>
+              <th v-if="session.user.role==='admin'">Client</th><th>Face value</th>
+              <th>Payout</th><th>Current status</th><th>Event time (UTC)</th></tr></thead>
+            <tbody>
+              <tr v-for="card in reportDrilldownRows" :key="card.id">
+                <td><span class="mono">{{card.activation_number}}</span><small>Card #{{card.id}}</small></td>
+                <td><strong>{{card.product_name}}</strong><small>{{card.brand_name}}</small></td>
+                <td v-if="session.user.role==='admin'">{{card.client_email}}</td>
+                <td class="report-drilldown-money">{{reportMoney(card.face_value,card.currency)}}</td>
+                <td class="report-drilldown-money">{{reportMoney(card.payout,card.currency)}}</td>
+                <td><span :class="['pill',card.status==='issued'?'issued':'cancelled']">{{card.status}}</span></td>
+                <td class="mono">{{card.occurred_at}}</td>
+              </tr>
+              <tr v-if="!reportDrilldownRows.length && !loadingTable">
+                <td :colspan="session.user.role==='admin'?7:6" class="empty">No matching Card events.</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </div>
+      <footer class="report-drilldown-footer">
+        <nav class="report-drilldown-pages" aria-label="Report Card list pagination">
+          <button type="button" class="btn outline small" :disabled="busy||reportDrilldownPage===1"
+            @click="changeReportDrilldownPage(1)">« First</button>
+          <button type="button" class="btn outline small" :disabled="busy||reportDrilldownPage===1"
+            @click="changeReportDrilldownPage(reportDrilldownPage-1)">← Previous</button>
+          <span>Page {{reportDrilldownPage}} of {{reportDrilldownPageCount}}</span>
+          <button type="button" class="btn outline small" :disabled="busy||reportDrilldownPage===reportDrilldownPageCount"
+            @click="changeReportDrilldownPage(reportDrilldownPage+1)">Next →</button>
+          <button type="button" class="btn outline small" :disabled="busy||reportDrilldownPage===reportDrilldownPageCount"
+            @click="changeReportDrilldownPage(reportDrilldownPageCount)">Last »</button>
+        </nav>
+        <button type="button" class="btn outline" @click="closeReportDrilldown()">Close</button>
       </footer>
     </section>
   </div>
