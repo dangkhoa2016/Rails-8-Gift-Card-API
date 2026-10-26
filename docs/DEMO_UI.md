@@ -34,6 +34,14 @@ Open http://localhost:3000/demo (or /demo/index.html). Sign in as admin@example.
 
 The API console supports GET, POST, PATCH and DELETE for same-origin /api/v1/ endpoints only. It sends JSON objects, accepts an optional Idempotency-Key header, and displays HTTP status, duration and raw JSON. See API_EXAMPLES.md for example requests.
 
+## Financial reports: human-readable dashboard
+
+The event-time ledger calculation and financial snapshots are unchanged. **Admin** sees **Financial reports** with the existing **By brand / By client** options. **Client** sees **Personal spending** with **By currency / By brand**. The Client **By brand** choice sends GET /api/v1/client/reports/spending?group_by=brand, restricted to that authenticated Client's own Cards. A Client cannot group across other Clients or open Admin-only Brand screens. The original currency-only response remains the default when group_by is omitted. Unsupported grouping returns 422 invalid_filter. Group names are returned as read-only labels for clarity.
+
+The UI provides **All time**, **This month** and **Last 30 days** quick periods, plus explicit From/To UTC inputs and a **Run report** button. From is inclusive; To is exclusive. Both empty means all historical events. The results show issued/cancelled event counts, **separate currency summary cards** for face value and payout, and a compact detail table with expandable **View figures** for gross issuance and cancellation totals. The currency selector filters the already loaded presentation only; it never requests another endpoint or converts between currencies. Net payout **activity** refers to issuance payout minus cancellation reversal in the selected event-time window, not the current outstanding balance. An empty report explains how to broaden the dates; the original raw API JSON is still inspectable.
+
+To create new report data, use the existing Client **Issue gift card** and **Cancel** workflows; no report-specific manual input is supported or required. Re-running the demo seed solely to display reports is unnecessary.
+
 ## Architecture and security
 
 - Three static files under public/demo/: index.html, app.js and style.css.

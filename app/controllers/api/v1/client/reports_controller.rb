@@ -6,7 +6,13 @@ module Api
 
         def spending
           range = Reports::DateRange.new(from: params[:from], to: params[:to])
-          data = Reports::ActivitySummary.new(group: :personal,
+          group_by = params[:group_by]
+          unless group_by.nil? || %w[currency brand].include?(group_by)
+            return render json: { error: { code: "invalid_filter",
+              message: "group_by must be currency or brand." } }, status: :unprocessable_content
+          end
+          group = group_by == "brand" ? :brand : :personal
+          data = Reports::ActivitySummary.new(group: group,
             date_range: range, client_id: current_user.id).call
           render json: { data: data,
             meta: { time_basis: "event_utc_half_open", monetary_basis: "currency_snapshot" } }

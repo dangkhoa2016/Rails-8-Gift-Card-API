@@ -81,6 +81,16 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         "cardSortLabel('product','Product / Brand')"
       )
       expect(response.body).to include(
+        'class="panel report-workspace"', 'class="report-filter-panel"',
+        'class="report-stats"', 'class="report-money-grid"',
+        'class="report-table"', 'class="report-breakdown"',
+        'class="report-empty"', 'class="report-raw"',
+        'v-model="reportGroup"', 'value="by_brand"', 'value="by_client"',
+        'v-model="reportClientGroup"', 'id="report-client-group"',
+        'value="currency"', 'value="brand"',
+        'Personal spending', 'id="report-currency"'
+      )
+      expect(response.body).to include(
         'class="card-modal-overlay"', 'class="card-detail-modal"',
         'id="card-detail-modal-title"', '@keydown.tab="trapCardModalFocus"',
         '@keydown.esc.stop.prevent="closeCardDetails()"', '@click.self="closeCardDetails()"'
@@ -132,6 +142,13 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'async changeCardSort(column)', 'cardSortAria(column)', 'cardSortIcon(column)',
         'this.cardPage = 1;',
         'this.cardTotal = Number(res.payload.meta?.total) || 0;'
+      )
+      expect(response.body).to include(
+        'reportPreset: "all"', 'reportCurrencyFilter: "all"',
+        'reportCurrencySummaries()', 'reportVisibleRows()',
+        'chooseReportPreset(preset)', 'reportCents(value)',
+        'reportFormattedCents(cents, currency)', 'reportClientGroup: "currency"',
+        'q.set("group_by", this.reportClientGroup)'
       )
       expect(response.body).to include(
         "const collections = { brands: this.brands, clients: this.clients, products: this.products }",
@@ -215,6 +232,8 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.body).to include(".error-modal-overlay", ".console-error-summary")
       expect(response.body).to include(".card-search-form", "nav.card-pagination", ".card-modal-overlay", ".card-detail-modal")
       expect(response.body).to include(".card-sort-button", ".card-sort-icon")
+      expect(response.body).to include(".report-workspace", ".report-filter-form",
+        ".report-money-grid", ".report-money-card", ".report-stats")
     end
   end
 

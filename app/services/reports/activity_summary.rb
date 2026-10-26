@@ -58,14 +58,23 @@ module Reports
         bind("brand_id", @brand_id, ActiveRecord::Type::Integer.new)
       ]
       key = { brand: "brand_id", client: "client_id", personal: nil }.fetch(@group)
-      ActiveRecord::Base.connection.exec_query(QUERY, "Activity summary", binds).to_a.map do |row|
+      rows = ActiveRecord::Base.connection.exec_query(QUERY, "Activity summary", binds).to_a
+      rows.each do |row|
         if key
           row[key] = row.delete("group_id")
         else
           row.delete("group_id")
         end
-        row
       end
+      # Decorate group identifiers using one lookup per report; monetary SQL is unchanged.
+      if @group == :brand
+        names = Brand.where(id: rows.map { |row| row["brand_id"] }).pluck(:id, :name).to_h
+        rows.each { |row| row["brand_name"] = names[row["brand_id"]] }
+      elsif @group == :client
+        names = User.where(id: rows.map { |row| row["client_id"] }).pluck(:id, :email).to_h
+        rows.each { |row| row["client_email"] = names[row["client_id"]] }
+      end
+      rows
     end
 
     private
