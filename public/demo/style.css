@@ -441,6 +441,12 @@ nav.report-drilldown-pages{display:flex;flex-direction:row;flex-wrap:wrap;align-
 @media(prefers-reduced-motion:reduce){.back-to-top:hover{transform:none}}
 
 /* API Console: role-aware request examples, editable request builder and safe hints. */
+.console-issuance-outcome{margin-top:16px;padding:2px 0 2px 13px;border-left:3px solid #8797b0;color:#314a69;font-size:12px;line-height:1.6}
+.console-issuance-outcome strong{display:block;font-size:13px}
+.console-issuance-outcome p{margin:4px 0 0}
+.console-issuance-outcome.created{border-left-color:#218b62}
+.console-issuance-outcome.replay{border-left-color:#3274c6}
+.console-issuance-outcome.conflict{border-left-color:#bd6d56}
 .console-request-panel h2{margin-bottom:10px}
 .console-template-box{margin-top:19px;padding:17px;border:1px solid #d9e7fa;background:#f5f9ff;border-radius:12px}
 .console-template-box>label{font-size:13px;color:#314b70}

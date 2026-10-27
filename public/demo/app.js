@@ -91,7 +91,15 @@
         note: "Creates an access grant. Replace the Client and Product IDs first." },
       { id: "admin-soft-delete", group: "write", label: "Soft-delete a product",
         method: "DELETE", path: "/api/v1/admin/products/:product_id",
-        note: "Changes the Product to inactive/deleted. Replace :product_id carefully." }
+        note: "Changes the Product to inactive/deleted. Replace :product_id carefully." },
+      { id: "admin-issue-card", group: "cards", label: "Create a Card for a Client",
+        method: "POST", path: "/api/v1/admin/clients/:client_id/cards",
+        body: { product_id: "REPLACE_WITH_PRODUCT_ID", with_pin: false },
+        uniqueKey: true,
+        note: "Enter a Client ID and one of that Client's granted Product IDs. Creates a real Card. Keep the same key to test a safe retry (HTTP 200)." },
+      { id: "admin-cancel-card", group: "cards", label: "Cancel a Client's Card",
+        method: "POST", path: "/api/v1/admin/clients/:client_id/cards/:card_id/cancel",
+        note: "Enter the same Client ID and the Card ID returned by Create. Cancels that real Card; it cannot be undone." }
     ],
     client: [
       { id: "client-catalog", group: "read", label: "List eligible products · Catalog",
@@ -186,8 +194,9 @@
         const examples = consoleTemplateCatalog[this.session?.user?.role] || [];
         return [
           { label: "Read-only examples · Safe to explore", items: examples.filter(t => t.group === "read") },
-          { label: "Write operations · Changes real data", items: examples.filter(t => t.group === "write") }
-        ];
+          { label: "Create or edit data · Saves real changes", items: examples.filter(t => t.group === "write") },
+          { label: "Create or cancel Cards · Admin actions", items: examples.filter(t => t.group === "cards") }
+        ].filter(group => group.items.length > 0);
       },
       selectedConsoleTemplate() {
         return this.consoleTemplateGroups.flatMap(group => group.items)
@@ -196,6 +205,31 @@
       consoleHasPlaceholders() {
         return /:[a-z_]+(?=[/?&]|$)/i.test(this.consoleForm.path) ||
           /REPLACE_WITH_[A-Z_]+/.test(this.consoleForm.body);
+      },
+      consoleIssuanceOutcome() {
+        // Interpret only the *completed response*, never the editable request form.
+        // A successful 200 on this exact endpoint is an idempotent replay, not
+        // a new issuance. Other API requests keep their original response UI.
+        const { method, path, status, body } = this.response;
+        const endpoint = path?.split("?")[0].replace(/\/$/, "");
+        const isIssue = endpoint === "/api/v1/client/cards" ||
+          /^\/api\/v1\/admin\/clients\/[1-9]\d*\/cards$/.test(endpoint || "");
+        if (method !== "POST" || !isIssue) return null;
+        const cardId = Number(body?.data?.id);
+        if ((status === 200 || status === 201) &&
+            Number.isSafeInteger(cardId) && cardId > 0) {
+          return status === 201
+            ? { type: "created", title: "201 Created — New gift card issued",
+                description: "A new Card was created by this request.", cardId }
+            : { type: "replay", title: "200 OK — Idempotent replay",
+                description: "Existing Card returned. No new Card was issued.", cardId };
+        }
+        if (status === 409 && body?.error?.code === "idempotency_key_reused") {
+          return { type: "conflict", title: "409 Conflict — Idempotency key reused",
+            description: "This key was already used with a different request payload. No new Card was issued.",
+            cardId: null };
+        }
+        return null;
       },
       heading() { return sections[this.tab][0]; },
       hint() { return sections[this.tab][1]; },
@@ -1784,31 +1818,38 @@
         if (this.consoleHasPlaceholders) {
           return this.notify("Replace the sample ID or REPLACE_WITH value before sending the request.", "error");
         }
-        await this.execute(async () => {
-          const method = this.consoleForm.method;
-          const path = this.consoleForm.path;
-          let data;
-          if (method !== "GET" && this.consoleForm.body.trim()) {
-            try { data = JSON.parse(this.consoleForm.body); }
-            catch { throw new Error("Body is not valid JSON."); }
-            if (!data || typeof data !== "object" || Array.isArray(data)) {
-              throw new Error("The JSON body must be an object.");
+        try {
+          await this.execute(async () => {
+            const method = this.consoleForm.method;
+            const path = this.consoleForm.path;
+            let data;
+            if (method !== "GET" && this.consoleForm.body.trim()) {
+              try { data = JSON.parse(this.consoleForm.body); }
+              catch { throw new Error("Body is not valid JSON."); }
+              if (!data || typeof data !== "object" || Array.isArray(data)) {
+                throw new Error("The JSON body must be an object.");
+              }
             }
-          }
-          try {
-            const res = await this.request(method, path, data, this.consoleForm.key);
-            this.response = { method, path, body: res.payload, status: res.status, duration: res.duration };
-            this.lastApiError = null;
-          } catch (error) {
-            if (error.status) {
-              this.response = { method, path, body: error.body, status: error.status, duration: error.duration };
-              this.rememberApiError(error, method, path);
-              if (error.status === 401) throw error;
-              return; // Render friendly summary; raw response remains in the details modal.
+            try {
+              const res = await this.request(method, path, data, this.consoleForm.key);
+              this.response = { method, path, body: res.payload, status: res.status, duration: res.duration };
+              this.lastApiError = null;
+            } catch (error) {
+              if (error.status) {
+                this.response = { method, path, body: error.body, status: error.status, duration: error.duration };
+                this.rememberApiError(error, method, path);
+                if (error.status === 401) throw error;
+                return; // Render friendly summary; raw response remains in the details modal.
+              }
+              throw error;
             }
-            throw error;
-          }
-        });
+          });
+        } finally {
+          // Always reveal the top-level result/error after Send, including failed
+          // HTTP responses, invalid JSON, and network errors. Leave inputs intact.
+          await this.$nextTick();
+          this.scrollToTop();
+        }
       }
     }
   });

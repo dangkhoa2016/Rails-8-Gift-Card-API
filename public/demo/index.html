@@ -5,9 +5,9 @@
 <meta name="referrer" content="no-referrer">
 <title>Gift Card API | Review Workspace</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="/demo/style.css?v=983cade2f79b">
+<link rel="stylesheet" href="/demo/style.css?v=0ebb7541e3ac">
 <script defer src="https://cdn.jsdelivr.net/npm/vue@3.5.22/dist/vue.global.prod.js" integrity="sha384-8b+88atXoPL4ijtVqe+2pA+PC8VNYSGqubRseMLV0qxfa5GMHeftEEHvk4eM4RFT" crossorigin="anonymous"></script>
-<script defer src="/demo/app.js?v=e27ac5ff81e0"></script>
+<script defer src="/demo/app.js?v=067d66a8a319"></script>
 </head>
 <body>
 <div id="app" v-cloak>
@@ -756,6 +756,11 @@
           </form>
         </div>
         <div class="panel"><span class="kicker">LIVE API RESPONSE</span><div class="response-heading"><h2>Response</h2><span v-if="response.status" :class="['http',response.status>=400?'error':'ok']">HTTP {{response.status}}</span></div><div class="response-meta">{{response.method}} {{response.path}} <span>{{response.duration}} ms</span></div>
+          <div v-if="consoleIssuanceOutcome" :class="['console-issuance-outcome',consoleIssuanceOutcome.type]" role="status" aria-live="polite">
+            <strong>{{consoleIssuanceOutcome.title}}</strong>
+            <p>{{consoleIssuanceOutcome.description}}</p>
+            <p v-if="consoleIssuanceOutcome.cardId">Card ID: <span class="mono">#{{consoleIssuanceOutcome.cardId}}</span></p>
+          </div>
           <div v-if="response.status>=400" class="console-error-summary" role="alert">
             <strong>{{lastApiError?.message||'The request could not be completed.'}}</strong>
             <p v-if="lastApiError?.requestId">Request ID: <code>{{lastApiError.requestId}}</code></p>
