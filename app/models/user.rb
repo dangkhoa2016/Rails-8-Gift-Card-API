@@ -8,6 +8,7 @@ class User < ApplicationRecord
   before_validation :normalize_email
   validates :email, presence: true, uniqueness: { case_sensitive: false },
     format: { with: URI::MailTo::EMAIL_REGEXP }
+  validates :password, length: { minimum: 12, maximum: 128 }, allow_nil: true
   validates :payout_rate, numericality: { greater_than_or_equal_to: 0, less_than_or_equal_to: 100 }, allow_nil: true
   validates :payout_rate, presence: true, if: :client?
 

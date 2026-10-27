@@ -1,12 +1,8 @@
 module Cards
   class Cancel
-    class Refused < StandardError
-      attr_reader :code, :http_status
-
+    class Refused < Cards::Refused
       def initialize(code, http_status: :conflict)
-        @code = code
-        @http_status = http_status
-        super(code.tr("_", " "))
+        super
       end
     end
 

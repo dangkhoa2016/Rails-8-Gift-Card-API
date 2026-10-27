@@ -4,83 +4,27 @@ module Api
       class CardsController < BaseController
         PIN_REVEAL_FAILURE_LIMIT = 5
         PIN_REVEAL_WINDOW = 15.minutes
-        # SQL expressions are fixed and never sourced from an incoming parameter.
-        CARD_SORT_COLUMNS = {
-          "activation_number" => [ "cards.activation_number" ],
-          "product" => [ "LOWER(products.name)", "LOWER(brands.name)" ],
-          "face_value" => [ "cards.face_value_snapshot", "cards.currency_snapshot" ],
-          "payout" => [ "cards.payout_amount_snapshot", "cards.currency_snapshot" ],
-          "status" => [ "cards.status" ],
-          "has_pin" => [ "(cards.pin IS NOT NULL)" ]
-        }.freeze
-
         def index
-          scope = current_user.cards.includes(product: :brand)
-          if request.query_parameters.key?("q")
-            query = request.query_parameters["q"]
-            unless query.is_a?(String) && query.length <= 100
-              return render json: { error: { code: "invalid_filter",
-                message: "Search must be a text value of up to 100 characters." } },
-                status: :unprocessable_content
-            end
-            term = query.strip
-            if term.present?
-              pattern = "%#{ActiveRecord::Base.sanitize_sql_like(term.downcase)}%"
-              scope = scope.joins(product: :brand).where(
-                "LOWER(cards.activation_number) LIKE :pattern OR " \
-                "LOWER(products.name) LIKE :pattern OR " \
-                "LOWER(brands.name) LIKE :pattern", pattern: pattern)
-            end
-          end
-          scope = scope.where(status: params[:status]) if %w[issued cancelled].include?(params[:status])
-          if request.query_parameters.key?("has_pin")
-            case request.query_parameters["has_pin"]
-            when "true"
-              scope = scope.where.not(pin: nil)
-            when "false"
-              scope = scope.where(pin: nil)
-            else
-              return render json: { error: { code: "invalid_filter",
-                message: "has_pin must be true or false." } }, status: :unprocessable_content
-            end
-          end
-          sort_by = request.query_parameters["sort_by"]
-          sort_dir = request.query_parameters["sort_dir"]
-          if sort_by.nil? && sort_dir.nil?
-            # Preserve the previously accepted newest-ID-first default.
-            scope = scope.order(id: :desc)
-          else
-            unless sort_by.is_a?(String) && CARD_SORT_COLUMNS.key?(sort_by) &&
-                (sort_dir.nil? || %w[asc desc].include?(sort_dir))
-              return render json: { error: { code: "invalid_filter",
-                message: "Unsupported Card sort column or direction." } },
-                status: :unprocessable_content
-            end
-            direction = (sort_dir || "asc").upcase
-            scope = scope.joins(product: :brand) if sort_by == "product"
-            order = CARD_SORT_COLUMNS.fetch(sort_by).map { |column| "#{column} #{direction}" }
-            scope = scope.reorder(Arel.sql((order + [ "cards.id DESC" ]).join(", ")))
-          end
-
-          page = [ params.fetch(:page, 1).to_i, 1 ].max
-          per_page = params.fetch(:per_page, 25).to_i.clamp(1, 100)
-          total = scope.count
-          cards = scope.limit(per_page).offset((page - 1) * per_page)
-          render json: { data: cards.map { |card| serialize(card) },
-            meta: { page: page, per_page: per_page, total: total } }
+          scope = Cards::ListQuery.new(client: current_user, filters: request.query_parameters).call
+          records, meta = paginate(scope)
+          render json: { data: records.map { |card| Cards::Serializer.call(card) }, meta: meta }
         end
 
         def show
           card = current_user.cards.includes(product: :brand).find_by(id: params[:id])
           return not_found unless card
-          render json: { data: serialize(card) }
+          render json: { data: Cards::Serializer.call(card) }
         end
 
         def create
+          # Issuance and idempotent replay may return a secret PIN.
+          # Never permit an intermediary or browser to store this response.
+          response.headers["Cache-Control"] = "no-store, private"
+          response.headers["Pragma"] = "no-cache"
           result = Cards::Issue.call(client: current_user,
             product_id: params[:product_id], with_pin: params[:with_pin],
             idempotency_key: request.headers["Idempotency-Key"], request: request)
-          data = serialize(result.card).merge(pin: result.card.pin)
+          data = Cards::Serializer.call(result.card).merge(pin: result.card.pin)
           render json: { data: data }, status: result.created ? :created : :ok
         rescue Cards::Issue::Refused => error
           AuditEvent.create!(actor: current_user, action: "card.issue_refused",
@@ -92,7 +36,7 @@ module Api
 
         def cancel
           card = Cards::Cancel.call(client: current_user, card_id: params[:id], request: request)
-          render json: { data: serialize(card) }
+          render json: { data: Cards::Serializer.call(card) }
         rescue Cards::Cancel::Refused => error
           render json: { error: { code: error.code, message: error.message } },
             status: error.http_status
@@ -147,17 +91,6 @@ module Api
         def not_found
           render json: { error: { code: "not_found", message: "Card not found." } },
             status: :not_found
-        end
-
-        def serialize(card)
-          card.as_json(only: %i[id client_id product_id status activation_number
-            face_value_snapshot currency_snapshot payout_rate_snapshot
-            payout_amount_snapshot issued_at cancelled_at]).merge(
-              product_name: card.product.name,
-              brand_name: card.product.brand.name,
-              # Only expose existence; never expose or decrypt the stored PIN in GET responses.
-              has_pin: card.read_attribute_before_type_cast(:pin).present?
-            )
         end
       end
     end

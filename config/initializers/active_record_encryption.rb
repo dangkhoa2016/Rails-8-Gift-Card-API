@@ -4,9 +4,9 @@
 secret = Rails.application.secret_key_base
 enc = Rails.application.config.active_record.encryption
 enc.primary_key = ENV["ACTIVE_RECORD_ENCRYPTION_PRIMARY_KEY"].presence ||
-  Digest::SHA256.hexdigest("gift_card_api-pin-primary:#{secret}")
+  Digest::SHA256.hexdigest("gift-card-api-pin-primary:#{secret}")
 enc.deterministic_key = ENV["ACTIVE_RECORD_ENCRYPTION_DETERMINISTIC_KEY"].presence ||
-  Digest::SHA256.hexdigest("gift_card_api-pin-deterministic:#{secret}")
+  Digest::SHA256.hexdigest("gift-card-api-pin-deterministic:#{secret}")
 enc.key_derivation_salt = ENV["ACTIVE_RECORD_ENCRYPTION_KEY_DERIVATION_SALT"].presence ||
-  Digest::SHA256.hexdigest("gift_card_api-pin-salt:#{secret}")
+  Digest::SHA256.hexdigest("gift-card-api-pin-salt:#{secret}")
 enc.support_unencrypted_data = false

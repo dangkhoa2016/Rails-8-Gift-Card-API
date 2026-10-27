@@ -1,13 +1,13 @@
 require "rails_helper"
 
-RSpec.describe "Gift Card API business acceptance workflow", type: :request do
+RSpec.describe "Gift card business acceptance workflow", type: :request do
   it "executes Admin setup, scoped Client issue/retry/cancel, reports and audit end to end" do
     admin = User.create!(email: "acceptance-admin@example.test",
       password: "admin-test-password", role: :admin)
     admin_headers = { "Authorization" => "Bearer #{Auth::TokenEncoder.call(admin)}" }
 
     post "/api/v1/admin/brands", headers: admin_headers,
-      params: { name: "Gift Card API Acceptance Brand", custom_fields: { region: "EU" } }, as: :json
+      params: { name: "Acceptance Brand", custom_fields: { region: "EU" } }, as: :json
     expect(response).to have_http_status(:created)
     brand_id = response.parsed_body.dig("data", "id")
 

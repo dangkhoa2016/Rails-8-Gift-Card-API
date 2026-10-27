@@ -1473,6 +1473,24 @@
         this.accessGrantsLoadedClientId = clientId;
         return { payload };
       },
+      async fetchCompleteCatalog(filters = new URLSearchParams()) {
+        // The API is server-paginated; the demo loads the authorized pages
+        // to preserve local sorting and storefront-style navigation.
+        const products = [];
+        let page = 1;
+        while (true) {
+          const query = new URLSearchParams(filters);
+          query.set("page", String(page));
+          query.set("per_page", "100");
+          const res = await this.request("GET", apiRoot + "client/catalog?" + query);
+          if (!Array.isArray(res.payload.data)) throw new Error("Invalid Catalog response.");
+          products.push(...res.payload.data);
+          const total = Number(res.payload.meta?.total);
+          if (!Number.isFinite(total) || products.length >= total || !res.payload.data.length) break;
+          page += 1;
+        }
+        return products;
+      },
       async fetchCatalog() {
         const sessionToken = this.session?.token;
         if (!sessionToken || this.tab !== "catalog") return;
@@ -1487,18 +1505,16 @@
         // A baseline response powers only the authorised Brand/currency selectors.
         // Every filtered result still comes from PostgreSQL via the real Catalog API.
         if (!this.catalogDirectoryLoaded || !params.size) {
-          const baseline = await this.request("GET", apiRoot + "client/catalog");
+          const products = await this.fetchCompleteCatalog();
           if (!stillCurrent()) return;
-          if (!Array.isArray(baseline.payload.data)) throw new Error("Invalid Catalog response.");
-          this.catalogDirectory = baseline.payload.data;
+          this.catalogDirectory = products;
           this.catalogDirectoryLoaded = true;
-          if (!params.size) this.catalog = baseline.payload.data;
+          if (!params.size) this.catalog = products;
         }
         if (params.size) {
-          const res = await this.request("GET", apiRoot + "client/catalog?" + params);
+          const products = await this.fetchCompleteCatalog(params);
           if (!stillCurrent()) return;
-          if (!Array.isArray(res.payload.data)) throw new Error("Invalid Catalog response.");
-          this.catalog = res.payload.data;
+          this.catalog = products;
         }
         this.catalogAppliedQuery = query;
         this.catalogAppliedCurrency = currency;
@@ -1507,8 +1523,7 @@
       },
       async fetchIssueCatalog() {
         // Issue card always has the full eligible set, independently of Catalog.
-        const res = await this.request("GET", apiRoot + "client/catalog");
-        this.issueCatalog = res.payload.data || [];
+        this.issueCatalog = await this.fetchCompleteCatalog();
         // Clear a stale one-time selection if permission was revoked meanwhile.
         if (!this.issueCatalog.some(p => p.id === Number(this.issueForm.product_id)))
           this.issueForm.product_id = "";

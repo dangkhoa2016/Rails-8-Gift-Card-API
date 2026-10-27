@@ -10,6 +10,8 @@ RSpec.describe "Authentication and role-scoped API", type: :request do
       role: :client, payout_rate: 85)
   end
 
+  before { Api::V1::AuthController::LOGIN_RATE_LIMIT_STORE.clear }
+
   def login(email:, password: "correct-password")
     post "/api/v1/auth/login", params: { email: email, password: password }, as: :json
     response.parsed_body
@@ -44,6 +46,29 @@ RSpec.describe "Authentication and role-scoped API", type: :request do
     expect(response).to have_http_status(:unauthorized)
     expect(AuditEvent.where(action: "auth.login_failed").count).to eq(2)
     expect(AuditEvent.pluck(:before_data, :after_data).flatten.compact.to_s).not_to include("bad-password")
+  end
+
+  it "limits repeated login attempts and returns a consistent JSON 429" do
+    5.times do
+      login(email: client.email, password: "invalid-password")
+      expect(response).to have_http_status(:unauthorized)
+    end
+    login(email: client.email, password: "correct-password")
+    expect(response).to have_http_status(:too_many_requests)
+    expect(response.parsed_body.dig("error", "code")).to eq("rate_limited")
+    expect(response.headers["Retry-After"]).to eq("900")
+    expect(AuditEvent.where(action: "auth.login_failed", actor: client).count).to eq(5)
+
+    post "/api/v1/auth/login", params: { email: client.email, password: "correct-password" },
+      headers: { "REMOTE_ADDR" => "198.51.100.22" }, as: :json
+    expect(response).to have_http_status(:ok)
+  end
+
+  it "enforces a minimum password length for newly created clients" do
+    short_password_client = User.new(email: "weak-password@example.test", role: :client,
+      payout_rate: 90, password: "short")
+    expect(short_password_client).not_to be_valid
+    expect(short_password_client.errors[:password]).to be_present
   end
 
   it "requires a signed, nonexpired token" do

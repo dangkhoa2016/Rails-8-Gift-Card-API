@@ -79,6 +79,14 @@ curl -sS -G http://localhost:3000/api/v1/client/catalog \
   --data-urlencode 'brand_id=BRAND_ID' \
   --data-urlencode 'currency=USD'
 
+# Server-side Catalog pagination. Results and total are scoped to this Client.
+# Default page=1 and per_page=25; maximum per_page=100.
+curl -sS -G http://localhost:3000/api/v1/client/catalog \
+  -H "Authorization: Bearer $CLIENT_TOKEN" \
+  --data-urlencode 'page=2' \
+  --data-urlencode 'per_page=25'
+# Response: {"data":[...],"meta":{"page":2,"per_page":25,"total":...}}
+
 curl -sS -X POST http://localhost:3000/api/v1/client/cards \
   -H "Authorization: Bearer $CLIENT_TOKEN" \
   -H 'Idempotency-Key: order-example-001' \
