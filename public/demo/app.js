@@ -147,7 +147,7 @@
         clientPage: 1, clientPerPage: 25, clientTotal: 0,
         auditPage: 1, auditPerPage: 25, auditTotal: 0, auditAppliedFilters: {},
         directoryModalKind: null, directoryModalRecord: null,
-        directoryModalTrigger: null, directoryModalPreviousOverflow: "",
+        directoryModalTrigger: null, directoryModalPreviousOverflow: "", directoryModalPreviousScrollY: 0,
         accessClientQuery: "", accessPickerOpen: false, accessProductQuery: "", accessGrantQuery: "",
         accessGrantsLoadedClientId: null, accessProductsLoadedBrandId: null,
         editingBrandId: null, editingProductId: null, editingClientId: null,
@@ -355,14 +355,16 @@
         this[fields[0]] = 1;
         await this.execute(() => this[fields[1]](), null, "table");
       },
-      async openDirectoryModal(kind, record) {
-        if (!["brands", "clients", "products", "audit"].includes(kind) || !record) return;
+      async openDirectoryModal(kind, record, previousScrollY = window.scrollY) {
+        if (!["brands", "clients", "products", "audit", "access"].includes(kind) || !record) return;
         this.directoryModalTrigger = document.activeElement;
+        this.directoryModalPreviousScrollY = previousScrollY;
         this.directoryModalPreviousOverflow = document.body.style.overflow;
         document.body.style.overflow = "hidden";
         this.directoryModalKind = kind;
         this.directoryModalRecord = record;
         await this.$nextTick();
+        window.scrollTo({ top: previousScrollY, behavior: "instant" });
         this.$refs.directoryModalHeading?.focus({ preventScroll: true });
       },
       closeDirectoryModal(restoreFocus = true) {
@@ -371,9 +373,12 @@
         this.directoryModalRecord = null;
         document.body.style.overflow = this.directoryModalPreviousOverflow;
         const trigger = this.directoryModalTrigger;
+        const previousScrollY = this.directoryModalPreviousScrollY;
         this.directoryModalTrigger = null;
         this.directoryModalPreviousOverflow = "";
+        this.directoryModalPreviousScrollY = 0;
         if (restoreFocus) this.$nextTick(() => {
+          window.scrollTo({ top: previousScrollY, behavior: "instant" });
           const target = trigger?.isConnected ? trigger : document.querySelector(".nav-link.selected");
           target?.focus({ preventScroll: true });
         });
@@ -434,6 +439,88 @@
           if (attributes.client_id) return { kind: "grants", id: attributes.client_id };
         }
         return null; // Admin has no card detail endpoint; do not render a broken link.
+      },
+      async fetchProductWithBrand(id) {
+        // Product show responses include brand_id but not the Brand name.
+        // Resolve its authoritative name for Audit modals without relying on
+        // a directory list that has not been loaded in this workspace.
+        const response = await this.request("GET", apiRoot + "admin/products/" + id);
+        const product = response.payload.data;
+        const brandId = Number(product.brand_id);
+        if (!Number.isSafeInteger(brandId) || brandId <= 0)
+          throw new Error("The Product has no valid Brand reference.");
+        const brand = await this.request("GET", apiRoot + "admin/brands/" + brandId);
+        return { ...product, brand_name: brand.payload.data.name };
+      },
+      async openAdminRelatedDetails(kind, rawId) {
+        // Audit and financial report links inspect the live record without
+        // navigating away or changing the underlying filters/pagination.
+        if (!["audit", "reports"].includes(this.tab) ||
+            this.session?.user?.role !== "admin" || this.busy ||
+            !["brands", "clients", "products"].includes(kind)) return;
+        const id = Number(rawId);
+        if (!Number.isSafeInteger(id) || id <= 0) return;
+        const origin = this.tab;
+        const previousScrollY = window.scrollY;
+        const record = await this.execute(async () => {
+          if (kind === "products") return this.fetchProductWithBrand(id);
+          const response = await this.request("GET", apiRoot + "admin/" + kind + "/" + id);
+          return response.payload.data;
+        }, null, "detail");
+        if (!record || this.tab !== origin) return;
+        if (this.directoryModalKind) {
+          // Following a related Brand inside Product details keeps the original
+          // trigger and body scroll lock, so closing still restores focus.
+          this.directoryModalKind = kind;
+          this.directoryModalRecord = record;
+          await this.$nextTick();
+          this.$refs.directoryModalHeading?.focus({ preventScroll: true });
+        } else {
+          await this.openDirectoryModal(kind, record, previousScrollY);
+        }
+      },
+      async openAuditRecordDetails(event) {
+        if (this.tab !== "audit" || this.session?.user?.role !== "admin" || this.busy) return;
+        const entity = this.auditEntity(event);
+        if (!entity) return;
+        if (entity.kind !== "grants") {
+          return this.openAdminRelatedDetails(entity.kind, entity.id);
+        }
+        // There is no individual ProductAccess show route. Fetch the authorized
+        // Client grants pages and match the exact access ID; the audit snapshot
+        // still describes an access that has since been revoked.
+        const snapshot = event.after_data || event.before_data || {};
+        const clientId = Number(snapshot.client_id);
+        const productId = Number(snapshot.product_id);
+        const accessId = Number(event.record_id);
+        if (![clientId, productId, accessId].every(n => Number.isSafeInteger(n) && n > 0)) return;
+        const previousScrollY = window.scrollY;
+        const response = await this.execute(
+          () => this.fetchFullAdminDirectory("clients/" + clientId + "/product_accesses"), null, "detail");
+        if (!response || this.tab !== "audit") return;
+        const activeGrant = response.data.find(grant => Number(grant.id) === accessId) || null;
+        let brandId = Number(activeGrant?.brand_id) || null;
+        let brandLabel = activeGrant?.brand_name || null;
+        let productLabel = activeGrant?.product_name || this.auditRecordLabel(event);
+        if (!brandId) {
+          // Revoked access is absent from current grants. Resolve its parent Brand
+          // using the Product's authorized show endpoint rather than guessing.
+          const product = await this.execute(
+            () => this.fetchProductWithBrand(productId), null, "detail");
+          if (!product || this.tab !== "audit") return;
+          brandId = Number(product.brand_id) || null;
+          brandLabel = product.brand_name || null;
+          productLabel = product.name || productLabel;
+        }
+        await this.openDirectoryModal("access", {
+          id: accessId, client_id: clientId, product_id: productId,
+          record_label: this.auditRecordLabel(event),
+          client_email: activeGrant?.client_email || this.clientName(clientId),
+          product_name: productLabel, brand_id: brandId, brand_name: brandLabel,
+          active: Boolean(activeGrant),
+          event_id: event.id, action: event.action, occurred_at: event.occurred_at,
+          before_data: event.before_data, after_data: event.after_data
+        }, previousScrollY);
       },
       async openAccessDetails(kind, rawId) {
         // Product access uses read-only details without changing its selected Client,
