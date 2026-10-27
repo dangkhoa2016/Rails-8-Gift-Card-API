@@ -10,6 +10,20 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
   end
 
   describe "static assets" do
+    it "uses content hashes for demo JS/CSS and prevents browser caching" do
+      get "/demo/index.html"
+      expect(response).to have_http_status(:ok)
+      expected_js = Digest::SHA256.file(Rails.root.join("public/demo/app.js")).hexdigest.first(12)
+      expected_css = Digest::SHA256.file(Rails.root.join("public/demo/style.css")).hexdigest.first(12)
+      expect(response.body).to include(%(/demo/app.js?v=#{expected_js}))
+      expect(response.body).to include(%(/demo/style.css?v=#{expected_css}))
+      expect(response.headers["cache-control"]).to include("no-store")
+
+      get "/demo/app.js"
+      expect(response).to have_http_status(:ok)
+      expect(response.headers["cache-control"]).to include("no-store")
+    end
+
     it "serves the HTML shell with a pinned Vue 3 production CDN global build" do
       get "/demo/index.html"
       expect(response).to have_http_status(:ok)
@@ -199,6 +213,68 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       )
     end
 
+    it "opens Audit Record and Financial report grouping links in fetched details modals" do
+      get "/demo/index.html"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        "openAdminRelatedDetails('brands',record.brand_id)",
+        "openAdminRelatedDetails('clients',record.client_id)",
+        "openAuditRecordDetails(e)",
+        'directoryModalKind===\'access\'?',
+        "Product access details",
+        "Current permission",
+        "Not currently granted (revoked)"
+      )
+      expect(response.body).not_to include(
+        "@click.prevent=\"navigateTo(auditEntity(e).kind,auditEntity(e).id)\"",
+        "@click.prevent=\"navigateTo('brands',record.brand_id)\"",
+        "@click.prevent=\"navigateTo('clients',record.client_id)\""
+      )
+
+      get "/demo/app.js"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        "async openAdminRelatedDetails(kind, rawId)",
+        "async openAuditRecordDetails(event)",
+        '["audit", "reports"].includes(this.tab)',
+        'this.request("GET", apiRoot + "admin/" + kind + "/" + id)',
+        'this.fetchFullAdminDirectory("clients/" + clientId + "/product_accesses")',
+        'response.data.find(grant => Number(grant.id) === accessId)',
+        'this.openDirectoryModal("access", {',
+        'previousScrollY = window.scrollY',
+        'window.scrollTo({ top: previousScrollY, behavior: "instant" })'
+      )
+    end
+
+    it "links ProductAccess Brand details without redirecting from Audit logs" do
+      get "/demo/index.html"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        'v-else-if="directoryModalKind===\'access\'"',
+        'v-if="directoryModalRecord.brand_id" class="entity-link"',
+        'entityHref(\'brands\',directoryModalRecord.brand_id)',
+        'openAdminRelatedDetails(\'brands\',directoryModalRecord.brand_id)'
+      )
+
+      get "/demo/app.js"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        'let brandId = Number(activeGrant?.brand_id) || null;',
+        'this.fetchProductWithBrand(productId)',
+        'brand_id: brandId, brand_name: brandLabel,',
+        'await this.openDirectoryModal("access", {',
+        'this.request("GET", apiRoot + "admin/brands/" + brandId)',
+        'return { ...product, brand_name: brand.payload.data.name };'
+      )
+      expect(response.body).to include('if (kind === "products") return this.fetchProductWithBrand(id);')
+
+      get "/demo/index.html"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        '{{directoryModalRecord.brand_name || brandName(directoryModalRecord.brand_id)}}'
+      )
+    end
+
     it "loads complete Product access permissions across every API page" do
       get "/demo/app.js"
       expect(response).to have_http_status(:ok)
@@ -361,11 +437,11 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'clientPage: 1, clientPerPage: 25, clientTotal: 0',
         'auditPage: 1, auditPerPage: 25, auditTotal: 0',
         'changeDirectoryPage(kind, next)', 'changeDirectoryPerPage(kind)',
-        'openDirectoryModal(kind, record)', 'closeDirectoryModal(restoreFocus = true)',
+        'openDirectoryModal(kind, record, previousScrollY = window.scrollY)', 'closeDirectoryModal(restoreFocus = true)',
         'trapDirectoryModalFocus(event)', 'safeAuditFields(data)',
         'fetchFullAdminDirectory(resource)', 'this.auditAppliedFilters = filters;',
         'await this.openDirectoryModal(kind, existing);',
-        '["brands", "clients", "products", "audit"].includes(kind)',
+        '["brands", "clients", "products", "audit", "access"].includes(kind)',
         'if (this.tab === "products") {',
         'await this.inspect(kind, id);',
         'await this.openDirectoryModal(kind, record);',

@@ -15,8 +15,8 @@ Rails.application.configure do
   # loading is working properly before deploying your code.
   config.eager_load = ENV["CI"].present?
 
-  # Configure public file server for tests with cache-control for performance.
-  config.public_file_server.headers = { "cache-control" => "public, max-age=3600" }
+  # Mirror the no-store policy used for the static reviewer UI in other environments.
+  config.public_file_server.headers = { "cache-control" => "no-store, max-age=0, must-revalidate" }
 
   # Show full error reports.
   # Test the same safe API JSON exceptions flow used by the public demo.

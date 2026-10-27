@@ -12,8 +12,9 @@ Rails.application.configure do
   # Full error reports are disabled.
   config.consider_all_requests_local = false
 
-  # Cache assets for far-future expiry since they are all digest stamped.
-  config.public_file_server.headers = { "cache-control" => "public, max-age=#{1.year.to_i}" }
+  # Demo assets are served without an asset-pipeline digest filename.
+  # Never cache HTML/JS/CSS across reviewer UI deployments.
+  config.public_file_server.headers = { "cache-control" => "no-store, max-age=0, must-revalidate" }
 
   # Enable serving of images, stylesheets, and JavaScripts from an asset server.
   # config.asset_host = "http://assets.example.com"
