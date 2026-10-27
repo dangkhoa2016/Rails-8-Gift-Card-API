@@ -443,6 +443,16 @@
           behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"
         });
       },
+      async navigateFromSidebar(section) {
+        // Apply page-level scrolling only to accepted sidebar navigation.
+        // In-page entity links continue using go() without changing their
+        // existing focus, deep-link, or scroll behavior.
+        if (this.busy || !this.menu.some(item => item.id === section)) return;
+        const navigation = this.go(section);
+        await this.$nextTick();
+        this.scrollToTop();
+        return navigation;
+      },
       async scrollToSaveNotice(result) {
         // Create returns false and Update returns true; only null means failure.
         if (result === null) return;

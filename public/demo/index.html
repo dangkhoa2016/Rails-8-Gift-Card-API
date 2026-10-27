@@ -7,7 +7,7 @@
 <link rel="icon" href="data:,">
 <link rel="stylesheet" href="/demo/style.css?v=21cb8ef2b13f">
 <script defer src="https://cdn.jsdelivr.net/npm/vue@3.5.22/dist/vue.global.prod.js" integrity="sha384-8b+88atXoPL4ijtVqe+2pA+PC8VNYSGqubRseMLV0qxfa5GMHeftEEHvk4eM4RFT" crossorigin="anonymous"></script>
-<script defer src="/demo/app.js?v=df3752689bac"></script>
+<script defer src="/demo/app.js?v=e4dd0c25967d"></script>
 </head>
 <body>
 <div id="app" v-cloak>
@@ -15,7 +15,7 @@
     <div class="identity"><span class="logo">G</span><span><strong>Gift Card API</strong><small>Rails 8.1 / Vue 3</small></span></div>
     <div class="nav-label">WORKSPACE</div>
     <nav aria-label="Main navigation">
-      <button v-for="m in menu" :key="m.id" type="button" :class="['nav-link', {selected:tab===m.id}]" @click="go(m.id)">
+      <button v-for="m in menu" :key="m.id" type="button" :class="['nav-link', {selected:tab===m.id}]" @click="navigateFromSidebar(m.id)">
         <span class="nav-icon">{{m.icon}}</span>{{m.text}}
       </button>
     </nav>

@@ -164,6 +164,33 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       )
     end
 
+    it "scrolls to the page top only for accepted Admin and Client sidebar navigation" do
+      get "/demo/index.html"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include('@click="navigateFromSidebar(m.id)"')
+      expect(response.body).not_to include('@click="go(m.id)"')
+
+      get "/demo/app.js"
+      expect(response).to have_http_status(:ok)
+      script = response.body
+      sidebar_method = script.split("async navigateFromSidebar(section) {", 2).last
+        .split("\n      },", 2).first
+      expect(sidebar_method).to include(
+        'if (this.busy || !this.menu.some(item => item.id === section)) return;',
+        'const navigation = this.go(section);',
+        'await this.$nextTick();',
+        'this.scrollToTop();',
+        'return navigation;'
+      )
+      expect(sidebar_method.index('await this.$nextTick();')).to be <
+        sidebar_method.index('this.scrollToTop();')
+      expect(script).to include(
+        'async go(section, { preserveGrantClient = false, brandId = null, selectedProductId = null } = {})',
+        'async navigateTo(kind, rawId) {',
+        'behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth"'
+      )
+    end
+
     it "scrolls the API Console to top after successful and failed sends" do
       get "/demo/app.js"
       expect(response).to have_http_status(:ok)
