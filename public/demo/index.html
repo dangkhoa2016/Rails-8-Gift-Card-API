@@ -5,9 +5,9 @@
 <meta name="referrer" content="no-referrer">
 <title>Gift Card API | Review Workspace</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="/demo/style.css?v=0ebb7541e3ac">
+<link rel="stylesheet" href="/demo/style.css?v=ec3a69f6c377">
 <script defer src="https://cdn.jsdelivr.net/npm/vue@3.5.22/dist/vue.global.prod.js" integrity="sha384-8b+88atXoPL4ijtVqe+2pA+PC8VNYSGqubRseMLV0qxfa5GMHeftEEHvk4eM4RFT" crossorigin="anonymous"></script>
-<script defer src="/demo/app.js?v=067d66a8a319"></script>
+<script defer src="/demo/app.js?v=442dae80f597"></script>
 </head>
 <body>
 <div id="app" v-cloak>
@@ -56,7 +56,7 @@
       </div>
     </template>
     <template v-else>
-      <div class="toolbar" v-if="tab!=='console'"><span>{{hint}}</span><button type="button" class="btn outline small" :disabled="busy" @click="refresh">↻ Refresh</button></div>
+      <div class="toolbar" v-if="tab!=='console'"><span>{{hint}}</span><button type="button" class="btn outline small" :disabled="busy||(tab==='overview'&&overviewLoading)" @click="refresh">↻ Refresh</button></div>
       <div v-if="loadingTable || loadingDetail" class="loading-notice" role="status" aria-live="polite">
         <svg class="loading-icon" viewBox="0 0 24 24" width="22" height="22" fill="none" aria-hidden="true">
           <circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity=".24" stroke-width="3"></circle>
@@ -66,11 +66,78 @@
         <span class="loading-track" aria-hidden="true"></span>
       </div>
 
-      <section v-if="tab==='overview'" class="grid-overview">
-        <div class="metric"><small>ACCOUNT ROLE</small><strong>{{session.user.role.toUpperCase()}}</strong><span>Role-based API access</span></div>
-        <div class="metric"><small>BACKEND</small><strong>Rails 8.1</strong><span>PostgreSQL persistence</span></div>
-        <div class="metric"><small>FRONTEND</small><strong>Vue 3</strong><span>CDN · no build</span></div>
-        <div class="panel full"><span class="kicker">GET STARTED</span><h2>Select a workflow</h2><p class="muted">The UI uses live data. Admin should create Brands, Products and Clients, then grant access. Client can issue and cancel cards after signing in.</p><button :class="['btn','primary',{processing:submitting}]" @click="go(session.user.role==='admin'?'brands':'catalog')">Open workspace →</button></div>
+      <section v-if="tab==='overview'" class="overview-home" aria-label="Account overview">
+        <div :class="['overview-hero',{client:session.user.role==='client'}]">
+          <div class="overview-hero-copy">
+            <span class="overview-hero-eyebrow"><span class="overview-live-dot"></span>{{session.user.role==='admin'?'ADMIN WORKSPACE':'CLIENT WORKSPACE'}} · WOGI GIFT CARDS</span>
+            <h2>{{session.user.role==='admin'?'Welcome back. You’re in control.':'Welcome back. Let’s get started.'}}</h2>
+            <p>{{session.user.role==='admin'
+              ?'Manage your gift card catalog, client access and financial activity from one place.'
+              :'Find products you can issue, manage your gift cards and follow your activity.'}}</p>
+            <div class="overview-hero-actions">
+              <button type="button" class="btn overview-hero-primary" :disabled="busy" @click="go(session.user.role==='admin'?'grants':'catalog')">
+                {{session.user.role==='admin'?'Manage product access':'Explore catalog'}} <span aria-hidden="true">→</span>
+              </button>
+              <button type="button" class="btn overview-hero-secondary" :disabled="busy" @click="go(session.user.role==='admin'?'reports':'cards')">
+                {{session.user.role==='admin'?'View financial reports':'View my cards'}}
+              </button>
+            </div>
+          </div>
+          <div class="overview-hero-art" aria-hidden="true">
+            <div class="overview-art-orbit one"></div><div class="overview-art-orbit two"></div>
+            <div class="overview-art-ticket"><span class="overview-ticket-label">GIFT CARD</span><span class="overview-ticket-symbol">✦</span><span class="overview-ticket-lines"><i></i><i></i><i></i></span><span class="overview-ticket-foot">WOGI <b>·</b> VERIFIED API</span></div>
+            <span class="overview-art-tag">{{session.user.role==='admin'?'MANAGE · MONITOR':'EXPLORE · ISSUE'}}</span>
+          </div>
+        </div>
+
+        <div class="overview-section-heading">
+          <div><span class="kicker">LIVE OVERVIEW</span><h2>At a glance</h2><p>Real numbers from your {{session.user.role==='admin'?'Admin':'Client'}} APIs, not demo estimates.</p></div>
+          <span v-if="overviewLoading" class="overview-sync" role="status">Updating…</span>
+          <span v-else class="overview-sync"><span class="overview-sync-dot"></span> {{overviewError?'Partially available':'Up to date'}}</span>
+        </div>
+        <div class="overview-metrics" aria-live="polite">
+          <div v-for="metric in overviewMetricCards" :key="metric.key" class="overview-stat">
+            <span class="overview-stat-icon" aria-hidden="true">{{metric.icon}}</span>
+            <span class="overview-stat-value">{{overviewLoading?'…':(overviewStats[metric.key]===null?'—':overviewStats[metric.key])}}</span>
+            <strong>{{metric.label}}</strong>
+            <small>{{overviewStats[metric.key]===null&&!overviewLoading?'Data unavailable':metric.detail}}</small>
+          </div>
+        </div>
+        <div v-if="overviewError&&!overviewLoading" class="overview-error" role="status">
+          Some overview figures could not be loaded.
+          <button type="button" class="text-btn" :disabled="busy" @click="loadOverview">Retry figures →</button>
+        </div>
+
+        <div class="overview-panels">
+          <section class="panel overview-shortcuts-panel">
+            <span class="kicker">QUICK ACCESS</span><h2>Your workspace shortcuts</h2>
+            <p class="muted">Jump straight to what you want to do next.</p>
+            <div class="overview-shortcuts">
+              <button v-for="action in overviewQuickActions" :key="action.tab" type="button" class="overview-shortcut" :disabled="busy" @click="go(action.tab)">
+                <span class="overview-shortcut-icon" aria-hidden="true">{{action.icon}}</span>
+                <span class="overview-shortcut-copy"><strong>{{action.title}}</strong><small>{{action.detail}}</small></span>
+                <span class="overview-shortcut-arrow" aria-hidden="true">↗</span>
+              </button>
+            </div>
+          </section>
+          <aside class="panel overview-guide">
+            <span class="kicker">RECOMMENDED FLOW</span><h2>Three simple steps</h2>
+            <p class="muted">A useful path when you’re new to this workspace.</p>
+            <ol class="overview-steps">
+              <li v-for="(step,index) in overviewSteps" :key="step.tab">
+                <span class="overview-step-number">{{String(index+1).padStart(2,'0')}}</span>
+                <span><strong>{{step.title}}</strong><small>{{step.detail}}</small>
+                  <button type="button" class="text-btn" :disabled="busy" @click="go(step.tab)">Open {{step.tab==='grants'?'Product access':step.tab==='reports'?'reports':step.tab}} →</button>
+                </span>
+              </li>
+            </ol>
+          </aside>
+        </div>
+        <div class="overview-reassurance">
+          <span class="overview-reassurance-icon" aria-hidden="true">✓</span>
+          <span><strong>Connected to the real API</strong><small>Actions use your account permissions. Creating or cancelling a Card changes real demo data; browsing and reports are read-only.</small></span>
+          <button type="button" class="text-btn" :disabled="busy" @click="go('console')">Explore API Console →</button>
+        </div>
       </section>
 
       <section v-if="tab==='brands'" class="two-col">
