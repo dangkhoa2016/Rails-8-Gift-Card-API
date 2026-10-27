@@ -9,7 +9,7 @@
 
   const apiRoot = "/api/v1/";
   const sections = {
-    overview: ["Overview", "Role-scoped workflows and architecture"],
+    overview: ["Overview", "Your account activity and next steps"],
     brands: ["Brands", "Create and manage the brand catalog"],
     products: ["Products", "Configure face value, currency, and availability"],
     clients: ["Clients", "Manage accounts and payout rates"],
@@ -141,6 +141,9 @@
     data() {
       return {
         tab: "overview", session: null, busy: false,
+        overviewStats: { brands: null, clients: null, events: null,
+          eligible: null, issued: null, cancelled: null },
+        overviewLoading: false, overviewError: false, overviewRequestId: 0,
         showBackToTop: false,
         loadingTable: false, loadingDetail: false, submitting: false,
         flash: { text: "", kind: "success" },
@@ -233,6 +236,47 @@
       },
       heading() { return sections[this.tab][0]; },
       hint() { return sections[this.tab][1]; },
+      overviewMetricCards() {
+        return this.session?.user?.role === "admin"
+          ? [
+              { key: "brands", icon: "▦", label: "Brands", detail: "In your catalog" },
+              { key: "clients", icon: "◉", label: "Clients", detail: "Client accounts" },
+              { key: "events", icon: "≡", label: "Audit events", detail: "Recorded activity" }
+            ]
+          : [
+              { key: "eligible", icon: "▦", label: "Available products", detail: "Ready to issue" },
+              { key: "issued", icon: "◇", label: "Issued cards", detail: "Currently issued" },
+              { key: "cancelled", icon: "▤", label: "Cancelled cards", detail: "Previously cancelled" }
+            ];
+      },
+      overviewQuickActions() {
+        return this.session?.user?.role === "admin"
+          ? [
+              { tab: "grants", icon: "◇", title: "Product access", detail: "Choose who can issue each product" },
+              { tab: "clients", icon: "◉", title: "Manage clients", detail: "Review accounts and payout rates" },
+              { tab: "reports", icon: "↗", title: "Financial reports", detail: "Explore issued and cancelled activity" },
+              { tab: "audit", icon: "≡", title: "Audit logs", detail: "Inspect recent changes and outcomes" }
+            ]
+          : [
+              { tab: "catalog", icon: "▦", title: "Browse catalog", detail: "Find a gift card product" },
+              { tab: "issue", icon: "◇", title: "Issue a gift card", detail: "Create a Card with a safe retry key" },
+              { tab: "cards", icon: "▤", title: "My cards", detail: "Find, inspect or cancel your Cards" },
+              { tab: "reports", icon: "↗", title: "My spending", detail: "Review activity by currency or Brand" }
+            ];
+      },
+      overviewSteps() {
+        return this.session?.user?.role === "admin"
+          ? [
+              { title: "Prepare the catalog", detail: "Set up Brands and Products.", tab: "brands" },
+              { title: "Give clients access", detail: "Grant the Products each Client can issue.", tab: "grants" },
+              { title: "Review activity", detail: "Use reports and audit events to verify changes.", tab: "reports" }
+            ]
+          : [
+              { title: "Choose a product", detail: "Browse Products available to your account.", tab: "catalog" },
+              { title: "Issue safely", detail: "Use an idempotency key to avoid duplicate Cards.", tab: "issue" },
+              { title: "Track your cards", detail: "View details, cancel Cards or check spending.", tab: "cards" }
+            ];
+      },
       selectedIssueProduct() {
         return this.issueCatalog.find(p => p.id === Number(this.issueForm.product_id)) || null;
       },
@@ -1081,6 +1125,11 @@
         this.auditAction = ""; this.auditActor = ""; this.auditOutcome = "";
         this.auditFrom = ""; this.auditTo = "";
         this.response = { method: "", path: "", body: null, status: null, duration: "—" };
+        this.overviewRequestId++;
+        this.overviewLoading = false;
+        this.overviewError = false;
+        this.overviewStats = { brands: null, clients: null, events: null,
+          eligible: null, issued: null, cancelled: null };
         this.tab = "overview";
       },
       async login() {
@@ -1097,6 +1146,7 @@
           this.tab = "overview";
           return result;
         }, () => "Signed in successfully.");
+        if (this.session?.user?.role && this.tab === "overview") await this.loadOverview();
       },
       async logout() {
         if (!this.session) return;
@@ -1178,9 +1228,49 @@
         this.cardDetail = null;
         await this.refresh();
       },
+      async loadOverview() {
+        if (this.tab !== "overview" || !this.session) return;
+        const role = this.session.user.role;
+        const token = this.session.token;
+        const requestId = ++this.overviewRequestId;
+        const sources = role === "admin"
+          ? [
+              ["brands", "admin/brands?page=1&per_page=1", "total"],
+              ["clients", "admin/clients?page=1&per_page=1", "total"],
+              ["events", "admin/audit_logs?page=1&per_page=1", "total"]
+            ]
+          : [
+              ["eligible", "client/catalog", "count"],
+              ["issued", "client/cards?status=issued&page=1&per_page=1", "total"],
+              ["cancelled", "client/cards?status=cancelled&page=1&per_page=1", "total"]
+            ];
+        this.overviewLoading = true;
+        this.overviewError = false;
+        this.overviewStats = { brands: null, clients: null, events: null,
+          eligible: null, issued: null, cancelled: null };
+        // Independent reads: a failed counter never hides the others. Reuse
+        // existing role-scoped APIs and their metadata, not guessed totals.
+        const outcomes = await Promise.allSettled(sources.map(([, path]) =>
+          this.request("GET", apiRoot + path, undefined, undefined, token)));
+        if (requestId !== this.overviewRequestId || this.tab !== "overview" ||
+            this.session?.token !== token) return;
+        const totals = { ...this.overviewStats };
+        outcomes.forEach((result, index) => {
+          const [field, , source] = sources[index];
+          const payload = result.status === "fulfilled" ? result.value.payload : null;
+          const value = source === "count"
+            ? (Array.isArray(payload?.data) ? payload.data.length : null)
+            : payload?.meta?.total;
+          if (Number.isSafeInteger(value) && value >= 0) totals[field] = value;
+          else this.overviewError = true;
+        });
+        this.overviewStats = totals;
+        this.overviewLoading = false;
+      },
       async refresh() {
         const role = this.session?.user?.role;
-        if (!role || this.tab === "overview" || this.tab === "console") return;
+        if (!role || this.tab === "console") return;
+        if (this.tab === "overview") return this.loadOverview();
         await this.execute(async () => {
           if (role === "admin") {
             if (["brands", "products", "grants", "reports"].includes(this.tab)) await this.fetchBrands();

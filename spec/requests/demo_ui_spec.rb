@@ -61,6 +61,51 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       )
     end
 
+    it "provides role-specific Overview dashboards with safe live counts and shortcuts" do
+      get "/demo/index.html"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        'v-if="tab===\'overview\'" class="overview-home"',
+        'overview-hero',
+        'overviewMetricCards',
+        'overviewQuickActions',
+        'overviewSteps',
+        'overviewStats[metric.key]',
+        'overviewLoading',
+        'overviewError',
+        '@click="loadOverview"',
+        'v-for="action in overviewQuickActions"',
+        '@click="go(action.tab)"'
+      )
+      expect(response.body).not_to include('ACCOUNT ROLE</small>', 'BACKEND</small>', 'FRONTEND</small>')
+
+      get "/demo/app.js"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        'async loadOverview()',
+        'this.overviewRequestId++',
+        '++this.overviewRequestId',
+        'Promise.allSettled(',
+        'admin/brands?page=1&per_page=1',
+        'admin/clients?page=1&per_page=1',
+        'admin/audit_logs?page=1&per_page=1',
+        'client/catalog',
+        'client/cards?status=issued&page=1&per_page=1',
+        'client/cards?status=cancelled&page=1&per_page=1',
+        'this.session?.token !== token',
+        'this.tab !== "overview"',
+        'if (this.tab === "overview") return this.loadOverview();'
+      )
+      expect(response.body).not_to include('localStorage.setItem("overview')
+
+      get "/demo/style.css"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        '.overview-hero', '.overview-metrics', '.overview-shortcuts',
+        '.overview-steps', '.overview-reassurance', '@media(max-width:520px)'
+      )
+    end
+
     it "scrolls the API Console to top after successful and failed sends" do
       get "/demo/app.js"
       expect(response).to have_http_status(:ok)
