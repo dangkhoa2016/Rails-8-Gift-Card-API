@@ -5,9 +5,9 @@
 <meta name="referrer" content="no-referrer">
 <title>Gift Card API | Review Workspace</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="/demo/style.css?v=ec3a69f6c377">
+<link rel="stylesheet" href="/demo/style.css?v=21cb8ef2b13f">
 <script defer src="https://cdn.jsdelivr.net/npm/vue@3.5.22/dist/vue.global.prod.js" integrity="sha384-8b+88atXoPL4ijtVqe+2pA+PC8VNYSGqubRseMLV0qxfa5GMHeftEEHvk4eM4RFT" crossorigin="anonymous"></script>
-<script defer src="/demo/app.js?v=442dae80f597"></script>
+<script defer src="/demo/app.js?v=df3752689bac"></script>
 </head>
 <body>
 <div id="app" v-cloak>
@@ -411,22 +411,137 @@
         </template>
       </section>
 
-      <section v-if="tab==='catalog'" class="panel"><span class="kicker">YOUR ENTITLED PRODUCTS</span><h2>Available catalog <em>{{catalog.length}}</em></h2>
-        <p class="muted">Only active products granted to this Client are shown.</p>
-        <form class="filters" @submit.prevent="loadCatalog">
-          <label>Search product or brand<input v-model="catalogQuery" placeholder="Name contains…"></label>
-          <label>Currency<input v-model="catalogCurrency" placeholder="USD" maxlength="3"></label>
-          <button :class="['btn','primary',{processing:submitting}]" :disabled="busy">Search</button>
-          <button class="btn outline" type="button" :disabled="busy" @click="clearCatalogFilters">Clear</button>
-          <span v-if="catalogBrandId" class="filter-chip">Brand filter: {{catalog.find(p=>p.brand_id===Number(catalogBrandId))?.brand_name||'Selected brand'}}</span>
-        </form>
-        <div class="catalog-grid"><div class="catalog-tile" v-for="p in catalog" :key="p.id">
-          <span class="tile-glyph">◇</span>
-          <a class="brand-tag entity-link" :href="entityHref('catalog-brand',p.brand_id)" @click.prevent="navigateTo('catalog-brand',p.brand_id)">{{p.brand_name}}</a>
-          <a class="entity-link product-title" :href="entityHref('issue-product',p.id)" @click.prevent="navigateTo('issue-product',p.id)">{{p.name}}</a>
-          <span>{{money(p.face_value,p.currency)}}</span>
-          <a class="entity-link issue-link" :href="entityHref('issue-product',p.id)" @click.prevent="navigateTo('issue-product',p.id)">Issue card →</a></div></div>
-        <div v-if="!catalog.length" class="empty">No eligible products match these filters, or no Admin grant is available.</div>
+      <section v-if="tab==='catalog'" class="catalog-workspace" aria-label="Your gift card catalog">
+        <div class="catalog-hero">
+          <div class="catalog-hero-content">
+            <span class="catalog-hero-eyebrow"><span class="overview-live-dot"></span> YOUR GIFT CARD CATALOG</span>
+            <h2>Find a gift card that fits.</h2>
+            <p>Explore products available to your account, compare gift card values, and choose the one you want to issue.</p>
+            <div class="catalog-hero-promise">
+              <span class="catalog-promise-item"><span class="catalog-promise-check" aria-hidden="true">✓</span> Products you can issue</span>
+              <span class="catalog-promise-dot" aria-hidden="true">·</span>
+              <span class="catalog-promise-item">Browsing never creates a Card</span>
+            </div>
+          </div>
+          <div class="catalog-hero-art" aria-hidden="true">
+            <div class="catalog-hero-ring"></div>
+            <div class="catalog-hero-ticket">
+              <span class="catalog-ticket-heading">WOGI <span>✦</span></span>
+              <span class="catalog-ticket-sparkle">✳</span>
+              <span class="catalog-ticket-label">GIFT CARD</span>
+              <span class="catalog-ticket-footer">THE GIFT OF CHOICE <span>◇ ◇ ◇</span></span>
+            </div>
+          </div>
+        </div>
+
+        <div class="catalog-highlights" aria-label="Your available catalog summary">
+          <div class="catalog-highlight"><span class="catalog-highlight-icon" aria-hidden="true">▦</span><div><strong>{{catalogDirectory.length}}</strong><span>Gift card options</span></div></div>
+          <div class="catalog-highlight"><span class="catalog-highlight-icon" aria-hidden="true">◉</span><div><strong>{{catalogBrandOptions.length}}</strong><span>Available brands</span></div></div>
+          <div class="catalog-highlight"><span class="catalog-highlight-icon" aria-hidden="true">◇</span><div><strong>{{catalogCurrencies.length}}</strong><span>{{catalogCurrencies.length===1?'Currency':'Currencies'}}</span></div></div>
+        </div>
+
+        <div class="panel catalog-discovery">
+          <div class="catalog-discovery-heading">
+            <div><span class="kicker">EXPLORE YOUR OPTIONS</span><h2>Browse gift cards</h2>
+              <p>Use a Brand shortcut or narrow the catalog by name and currency.</p></div>
+            <span class="catalog-readonly-tag"><span class="overview-live-dot"></span> Live catalog</span>
+          </div>
+
+          <div v-if="catalogFeaturedBrands.length" class="catalog-brand-browser">
+            <div class="catalog-brand-browser-heading"><strong>Explore by brand</strong><span>Quick picks from your available products</span></div>
+            <div class="catalog-brand-shortcuts">
+              <button type="button" :class="['catalog-brand-chip',{active:!catalogAppliedBrandId&&!catalogAppliedQuery&&!catalogAppliedCurrency}]"
+                :disabled="busy" :aria-pressed="!catalogAppliedBrandId&&!catalogAppliedQuery&&!catalogAppliedCurrency"
+                @click="chooseCatalogBrand('all')">All brands</button>
+              <button type="button" v-for="brand in catalogFeaturedBrands" :key="brand.id"
+                :class="['catalog-brand-chip',{active:Number(catalogAppliedBrandId)===brand.id&&!catalogAppliedQuery&&!catalogAppliedCurrency}]"
+                :aria-pressed="Number(catalogAppliedBrandId)===brand.id&&!catalogAppliedQuery&&!catalogAppliedCurrency"
+                :disabled="busy" @click="chooseCatalogBrand(brand.id)">{{brand.name}} <small>{{brand.count}}</small></button>
+            </div>
+          </div>
+
+          <form class="catalog-filter-form" @submit.prevent="loadCatalog">
+            <label class="catalog-filter-search" for="catalog-search">Find a gift card
+              <input id="catalog-search" type="search" v-model.trim="catalogQuery" placeholder="Search product or Brand name…" maxlength="100" autocomplete="off">
+            </label>
+            <label for="catalog-brand-filter">Brand
+              <select id="catalog-brand-filter" v-model="catalogBrandId">
+                <option value="">All brands</option>
+                <option v-for="brand in catalogBrandOptions" :key="brand.id" :value="String(brand.id)">{{brand.name}} ({{brand.count}})</option>
+              </select>
+            </label>
+            <label for="catalog-currency-filter">Currency
+              <select id="catalog-currency-filter" v-model="catalogCurrency">
+                <option value="">All currencies</option>
+                <option v-for="currency in catalogCurrencies" :key="currency" :value="currency">{{currency}}</option>
+              </select>
+            </label>
+            <div class="catalog-filter-actions">
+              <button type="submit" class="btn primary" :disabled="busy">Show gift cards →</button>
+              <button class="btn outline" type="button" :disabled="busy" @click="clearCatalogFilters">Clear filters</button>
+            </div>
+          </form>
+
+          <div v-if="catalogHasFilters" class="catalog-applied" aria-label="Applied catalog filters">
+            <span>Showing results for:</span>
+            <span v-if="catalogAppliedQuery" class="catalog-applied-chip">Search: {{catalogAppliedQuery}}</span>
+            <span v-if="catalogAppliedBrandId" class="catalog-applied-chip">Brand: {{catalogBrandOptions.find(b=>b.id===Number(catalogAppliedBrandId))?.name||'Selected brand'}}</span>
+            <span v-if="catalogAppliedCurrency" class="catalog-applied-chip">Currency: {{catalogAppliedCurrency}}</span>
+            <button class="text-btn" type="button" :disabled="busy" @click="clearCatalogFilters">Clear all ×</button>
+          </div>
+        </div>
+
+        <div class="catalog-results-heading" ref="catalogResultsTop">
+          <div><span class="kicker">AVAILABLE CATALOG</span><h2>{{catalog.length}} {{catalog.length===1?'gift card':'gift cards'}} found</h2>
+            <p>{{catalogHasFilters?'Matching your filters':'Showing all products you can issue'}} · {{catalogDirectory.length}} available in total</p>
+            <small v-if="catalog.length" class="catalog-showing">Showing {{(catalogPage-1)*catalogPerPage+1}}–{{Math.min(catalogPage*catalogPerPage,catalog.length)}} of {{catalog.length}}</small></div>
+          <div class="catalog-results-controls">
+            <label class="catalog-page-size" for="catalog-page-size">Per page
+              <select id="catalog-page-size" v-model.number="catalogPerPage" @change="catalogPage=1" :disabled="busy||catalog.length<2">
+                <option :value="12">12 cards</option><option :value="24">24 cards</option><option :value="48">48 cards</option>
+              </select>
+            </label>
+            <label class="catalog-sort-label" for="catalog-sort">Sort by
+            <select id="catalog-sort" v-model="catalogSort" @change="catalogPage=1" :disabled="busy||catalog.length<2">
+              <option value="name">Product name (A–Z)</option>
+              <option value="brand">Brand name (A–Z)</option>
+              <option value="value-asc">Value low to high (within currency)</option>
+              <option value="value-desc">Value high to low (within currency)</option>
+            </select>
+            </label>
+          </div>
+        </div>
+
+        <div v-if="!catalog.length" class="catalog-no-results" role="status">
+          <span class="catalog-no-results-icon" aria-hidden="true">⌕</span>
+          <h3>No gift cards found</h3>
+          <p>{{catalogHasFilters?'Try a different name, Brand or currency.':'There are no active gift card products assigned to your account yet. Please contact an Admin.'}}</p>
+          <button v-if="catalogHasFilters" type="button" class="btn primary" :disabled="busy" @click="clearCatalogFilters">View all available cards →</button>
+        </div>
+        <div v-else class="catalog-product-grid">
+          <article v-for="p in catalogVisibleProducts" :key="p.id" class="catalog-product-card">
+            <div :class="['catalog-product-art','catalog-tone-'+(Number(p.id)%4)]" aria-hidden="true">
+              <div class="catalog-product-art-top"><span class="catalog-art-brand-mark">{{(p.brand_name||'G').slice(0,1).toUpperCase()}}</span><span class="catalog-product-art-sparkle">✦</span></div>
+              <div class="catalog-product-art-bottom"><span>GIFT CARD</span><span>{{p.currency}}</span></div>
+            </div>
+            <div class="catalog-product-info">
+              <a class="catalog-product-brand entity-link" :href="entityHref('catalog-brand',p.brand_id)"
+                @click.prevent="navigateTo('catalog-brand',p.brand_id)">{{p.brand_name}}</a>
+              <a class="catalog-product-title entity-link" :href="entityHref('issue-product',p.id)"
+                @click.prevent="navigateTo('issue-product',p.id)">{{p.name}}</a>
+              <div class="catalog-product-value"><small>GIFT CARD VALUE</small><strong>{{money(p.face_value,p.currency)}}</strong></div>
+              <span class="catalog-product-currency">{{p.currency}} · Eligible product</span>
+            </div>
+            <a class="catalog-product-cta" :href="entityHref('issue-product',p.id)"
+              @click.prevent="navigateTo('issue-product',p.id)">Choose this card <span aria-hidden="true">→</span></a>
+          </article>
+        </div>
+        <nav v-if="catalogPageCount>1" class="catalog-pagination" aria-label="Catalog pages">
+          <button type="button" class="btn outline small" :disabled="busy||catalogPage===1" @click="changeCatalogPage(catalogPage-1)">← Previous</button>
+          <span>Page {{catalogPage}} of {{catalogPageCount}}</span>
+          <button type="button" class="btn outline small" :disabled="busy||catalogPage===catalogPageCount" @click="changeCatalogPage(catalogPage+1)">Next →</button>
+        </nav>
+        <p class="catalog-bottom-note"><span aria-hidden="true">✓</span> Choosing a card opens a separate review step. You will not issue or pay for anything from this catalog.</p>
       </section>
 
       <section v-if="tab==='issue'" class="issue-workspace">
