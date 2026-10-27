@@ -164,7 +164,9 @@
         editingBrandId: null, editingProductId: null, editingClientId: null,
         selectedDetail: null, cardDetail: null, cardModalOpen: false, cardModalTrigger: null,
         cardModalPreviousOverflow: "", catalogQuery: "", catalogCurrency: "",
-        catalogBrandId: "",
+        catalogBrandId: "", catalogSort: "name", catalogPage: 1, catalogPerPage: 12,
+        catalogDirectory: [], catalogDirectoryLoaded: false,
+        catalogAppliedQuery: "", catalogAppliedCurrency: "", catalogAppliedBrandId: "",
         brandForm: { name: "", state: "active", custom_fields: "{}" },
         productForm: { brand_id: "", name: "", face_value: "100.00", currency: "USD", state: "active", custom_fields: "{}" },
         clientForm: { email: "", password: "", payout_rate: "90", active: true },
@@ -276,6 +278,50 @@
               { title: "Issue safely", detail: "Use an idempotency key to avoid duplicate Cards.", tab: "issue" },
               { title: "Track your cards", detail: "View details, cancel Cards or check spending.", tab: "cards" }
             ];
+      },
+      catalogBrandOptions() {
+        const brands = new Map();
+        for (const product of this.catalogDirectory) {
+          const id = Number(product.brand_id);
+          if (!id || !product.brand_name) continue;
+          if (!brands.has(id)) brands.set(id, { id, name: product.brand_name, count: 0 });
+          brands.get(id).count++;
+        }
+        return [...brands.values()].sort((a, b) =>
+          a.name.localeCompare(b.name) || a.id - b.id);
+      },
+      catalogFeaturedBrands() {
+        return [...this.catalogBrandOptions]
+          .sort((a, b) => b.count - a.count || a.name.localeCompare(b.name))
+          .slice(0, 6);
+      },
+      catalogCurrencies() {
+        return [...new Set(this.catalogDirectory.map(p => p.currency).filter(Boolean))]
+          .sort((a, b) => a.localeCompare(b));
+      },
+      catalogHasFilters() {
+        return !!(this.catalogAppliedQuery || this.catalogAppliedCurrency || this.catalogAppliedBrandId);
+      },
+      catalogPageCount() {
+        return Math.max(1, Math.ceil(this.catalog.length / this.catalogPerPage));
+      },
+      catalogVisibleProducts() {
+        // Product values in different currencies are never compared numerically.
+        const products = [...this.catalog];
+        const name = p => String(p.name || "");
+        const brand = p => String(p.brand_name || "");
+        const byName = (a, b) => name(a).localeCompare(name(b)) || a.id - b.id;
+        if (this.catalogSort === "brand") {
+          products.sort((a, b) => brand(a).localeCompare(brand(b)) || byName(a, b));
+        } else if (this.catalogSort === "value-asc" || this.catalogSort === "value-desc") {
+          const direction = this.catalogSort === "value-asc" ? 1 : -1;
+          products.sort((a, b) => String(a.currency).localeCompare(String(b.currency)) ||
+            direction * (Number(a.face_value) - Number(b.face_value)) || byName(a, b));
+        } else {
+          products.sort(byName);
+        }
+        const page = Math.min(this.catalogPage, this.catalogPageCount);
+        return products.slice((page - 1) * this.catalogPerPage, page * this.catalogPerPage);
       },
       selectedIssueProduct() {
         return this.issueCatalog.find(p => p.id === Number(this.issueForm.product_id)) || null;
@@ -1102,6 +1148,14 @@
         this.catalogQuery = "";
         this.catalogCurrency = "";
         this.catalogBrandId = "";
+        this.catalogSort = "name";
+        this.catalogPage = 1;
+        this.catalogPerPage = 12;
+        this.catalogDirectory = [];
+        this.catalogDirectoryLoaded = false;
+        this.catalogAppliedQuery = "";
+        this.catalogAppliedCurrency = "";
+        this.catalogAppliedBrandId = "";
         this.selectedDetail = null;
         this.cardDetail = null;
         this.editingBrandId = this.editingProductId = this.editingClientId = null;
@@ -1174,6 +1228,8 @@
           this.catalogQuery = "";
           this.catalogCurrency = "";
           this.catalogBrandId = brandId || "";
+          this.catalogSort = "name";
+          this.catalogPage = 1;
         }
         if (section === "issue") {
           // Sidebar opens a clean chooser; Catalog product links supply only an ID.
@@ -1280,7 +1336,11 @@
             if (this.tab === "reports") await this.fetchReport();
             if (this.tab === "audit") await this.fetchAudit();
           } else {
-            if (this.tab === "catalog") await this.fetchCatalog();
+            if (this.tab === "catalog") {
+              // Refresh must also re-read current grants and currencies.
+              this.catalogDirectoryLoaded = false;
+              await this.fetchCatalog();
+            }
             if (this.tab === "issue") await this.fetchIssueCatalog();
             if (this.tab === "cards") await this.fetchCards();
             if (this.tab === "reports") await this.fetchReport();
@@ -1404,12 +1464,36 @@
         return { payload };
       },
       async fetchCatalog() {
+        const sessionToken = this.session?.token;
+        if (!sessionToken || this.tab !== "catalog") return;
+        const stillCurrent = () => this.session?.token === sessionToken && this.tab === "catalog";
+        const query = this.catalogQuery.trim();
+        const currency = this.catalogCurrency.trim().toUpperCase();
+        const brandId = this.catalogBrandId;
         const params = new URLSearchParams();
-        if (this.catalogQuery.trim()) params.set("q", this.catalogQuery.trim());
-        if (this.catalogCurrency.trim()) params.set("currency", this.catalogCurrency.trim().toUpperCase());
-        if (this.catalogBrandId) params.set("brand_id", String(this.catalogBrandId));
-        const res = await this.request("GET", apiRoot + "client/catalog" + (params.size ? "?" + params : ""));
-        this.catalog = res.payload.data || [];
+        if (query) params.set("q", query);
+        if (currency) params.set("currency", currency);
+        if (brandId) params.set("brand_id", String(brandId));
+        // A baseline response powers only the authorised Brand/currency selectors.
+        // Every filtered result still comes from PostgreSQL via the real Catalog API.
+        if (!this.catalogDirectoryLoaded || !params.size) {
+          const baseline = await this.request("GET", apiRoot + "client/catalog");
+          if (!stillCurrent()) return;
+          if (!Array.isArray(baseline.payload.data)) throw new Error("Invalid Catalog response.");
+          this.catalogDirectory = baseline.payload.data;
+          this.catalogDirectoryLoaded = true;
+          if (!params.size) this.catalog = baseline.payload.data;
+        }
+        if (params.size) {
+          const res = await this.request("GET", apiRoot + "client/catalog?" + params);
+          if (!stillCurrent()) return;
+          if (!Array.isArray(res.payload.data)) throw new Error("Invalid Catalog response.");
+          this.catalog = res.payload.data;
+        }
+        this.catalogAppliedQuery = query;
+        this.catalogAppliedCurrency = currency;
+        this.catalogAppliedBrandId = brandId;
+        this.catalogPage = 1;
       },
       async fetchIssueCatalog() {
         // Issue card always has the full eligible set, independently of Catalog.
@@ -1701,6 +1785,17 @@
         return this.loadCards();
       },
       async loadCatalog() { await this.execute(() => this.fetchCatalog(), null, "table"); },
+      async changeCatalogPage(page) {
+        const next = Number(page);
+        if (this.busy || !Number.isSafeInteger(next) || next < 1 ||
+            next > this.catalogPageCount || next === this.catalogPage) return;
+        this.catalogPage = next;
+        await this.$nextTick();
+        this.$refs.catalogResultsTop?.scrollIntoView({
+          behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth",
+          block: "start"
+        });
+      },
       async changeReportGroup() {
         if (this.busy || this.tab !== "reports") return;
         // Do not interpret the previous group's rows as the newly selected group:
@@ -1730,9 +1825,19 @@
         return this.execute(() => this.fetchAudit(true), "Audit filters cleared.", "table");
       },
       clearCatalogFilters() {
+        if (this.busy) return;
         this.catalogQuery = "";
         this.catalogCurrency = "";
         this.catalogBrandId = "";
+        return this.loadCatalog();
+      },
+      chooseCatalogBrand(id) {
+        if (this.busy) return;
+        // Brand quick picks are intentional one-Brand views, not a combination
+        // of stale text/currency filters.
+        this.catalogQuery = "";
+        this.catalogCurrency = "";
+        this.catalogBrandId = id === "all" ? "" : String(id);
         return this.loadCatalog();
       },
       selectBrand(id) { this.navigateTo("brands-products", id); },
