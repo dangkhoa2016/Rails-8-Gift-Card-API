@@ -17,13 +17,13 @@ Rails.application.configure do
   # Enable server timing.
   config.server_timing = true
 
-  # Enable/disable Action Controller caching. By default Action Controller caching is disabled.
   # Run rails dev:cache to toggle Action Controller caching.
-  if Rails.root.join("tmp/caching-dev.txt").exist?
-    config.public_file_server.headers = { "cache-control" => "public, max-age=#{2.days.to_i}" }
-  else
+  # The reviewer UI uses plain static assets, not fingerprinted Rails assets.
+  # Do not let the browser retain an older HTML/JS/CSS release.
+  unless Rails.root.join("tmp/caching-dev.txt").exist?
     config.action_controller.perform_caching = false
   end
+  config.public_file_server.headers = { "cache-control" => "no-store, max-age=0, must-revalidate" }
 
   # Change to :null_store to avoid any caching.
   config.cache_store = :memory_store

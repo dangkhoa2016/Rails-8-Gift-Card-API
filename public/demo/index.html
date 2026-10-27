@@ -5,9 +5,9 @@
 <meta name="referrer" content="no-referrer">
 <title>Gift Card API | Review Workspace</title>
 <link rel="icon" href="data:,">
-<link rel="stylesheet" href="/demo/style.css">
+<link rel="stylesheet" href="/demo/style.css?v=983cade2f79b">
 <script defer src="https://cdn.jsdelivr.net/npm/vue@3.5.22/dist/vue.global.prod.js" integrity="sha384-8b+88atXoPL4ijtVqe+2pA+PC8VNYSGqubRseMLV0qxfa5GMHeftEEHvk4eM4RFT" crossorigin="anonymous"></script>
-<script defer src="/demo/app.js"></script>
+<script defer src="/demo/app.js?v=e27ac5ff81e0"></script>
 </head>
 <body>
 <div id="app" v-cloak>
@@ -598,9 +598,9 @@
                 <td v-if="session.user.role==='admin'||reportClientGroup==='brand'" class="report-col-group">
                   <template v-if="session.user.role==='admin'">
                     <a v-if="reportGroup==='by_brand'" class="entity-link" :href="entityHref('brands',record.brand_id)"
-                      @click.prevent="navigateTo('brands',record.brand_id)">{{reportGroupLabel(record)}}</a>
+                      @click.prevent="openAdminRelatedDetails('brands',record.brand_id)">{{reportGroupLabel(record)}}</a>
                     <a v-else class="entity-link" :href="entityHref('clients',record.client_id)"
-                      @click.prevent="navigateTo('clients',record.client_id)">{{reportGroupLabel(record)}}</a>
+                      @click.prevent="openAdminRelatedDetails('clients',record.client_id)">{{reportGroupLabel(record)}}</a>
                   </template>
                   <strong v-else>{{reportGroupLabel(record)}}</strong>
                 </td>
@@ -668,7 +668,7 @@
           <tr v-for="e in audits" :key="e.id"><td class="mono">{{e.occurred_at}}</td><td><a v-if="canOpenAuditActor(e)" class="entity-link" :href="entityHref('clients',e.actor_id)" @click.prevent="navigateTo('clients',e.actor_id)">{{e.actor_email}}</a>
             <strong v-else>{{e.actor_email||'Unknown / system'}}</strong><small v-if="e.actor_id">User ID: {{e.actor_id}}</small></td>
             <td class="mono">{{e.action}}</td><td><span :class="['pill',e.outcome==='success'?'active':'inactive']">{{e.outcome}}</span></td>
-            <td><a v-if="auditEntity(e)" class="entity-link" :href="entityHref(auditEntity(e).kind,auditEntity(e).id)" @click.prevent="navigateTo(auditEntity(e).kind,auditEntity(e).id)">{{auditRecordLabel(e)}}</a>
+            <td><a v-if="auditEntity(e)" class="entity-link" :href="entityHref(auditEntity(e).kind,auditEntity(e).id)" @click.prevent="openAuditRecordDetails(e)">{{auditRecordLabel(e)}}</a>
               <strong v-else>{{auditRecordLabel(e)}}</strong><small v-if="e.record_id">{{e.record_type}} ID: {{e.record_id}}</small></td>
             <td><button type="button" class="text-btn" :disabled="busy" @click="openAuditDetails(e)">View details</button></td></tr>
           <tr v-if="!audits.length"><td class="empty" colspan="6">No audit events match these filters. Adjust the date range or outcome and try again.</td></tr>
@@ -782,7 +782,7 @@
       <header class="card-modal-header">
         <div><span class="kicker">ADMIN · READ-ONLY DETAILS</span>
           <h2 id="directory-modal-title" tabindex="-1" ref="directoryModalHeading">
-            {{directoryModalKind==='brands'?'Brand details':directoryModalKind==='clients'?'Client details':directoryModalKind==='products'?'Product details':'Audit event details'}}
+            {{directoryModalKind==='brands'?'Brand details':directoryModalKind==='clients'?'Client details':directoryModalKind==='products'?'Product details':directoryModalKind==='access'?'Product access details':'Audit event details'}}
           </h2>
           <p class="muted" v-if="directoryModalKind==='audit'">Event #{{directoryModalRecord.id}} · {{directoryModalRecord.occurred_at}}</p>
         </div>
@@ -808,7 +808,7 @@
             <dt>Product ID</dt><dd>#{{directoryModalRecord.id}}</dd>
             <dt>Name</dt><dd><strong>{{directoryModalRecord.name}}</strong></dd>
             <dt>Brand</dt><dd><a class="entity-link" :href="entityHref('brands',directoryModalRecord.brand_id)"
-              @click.prevent="tab==='grants' ? openAccessDetails('brands',directoryModalRecord.brand_id) : navigateTo('brands',directoryModalRecord.brand_id)">{{brandName(directoryModalRecord.brand_id)}}</a>
+              @click.prevent="tab==='grants' ? openAccessDetails('brands',directoryModalRecord.brand_id) : (tab==='audit'||tab==='reports' ? openAdminRelatedDetails('brands',directoryModalRecord.brand_id) : navigateTo('brands',directoryModalRecord.brand_id))">{{directoryModalRecord.brand_name || brandName(directoryModalRecord.brand_id)}}</a>
               <small class="directory-detail-subtle">#{{directoryModalRecord.brand_id}}</small></dd>
             <dt>Face value</dt><dd>{{reportMoney(directoryModalRecord.face_value,directoryModalRecord.currency)}}</dd>
             <dt>Currency</dt><dd><span class="report-currency-badge">{{directoryModalRecord.currency}}</span></dd>
@@ -817,6 +817,28 @@
             <dt v-if="directoryModalRecord.deleted_at">Deleted at</dt>
             <dd v-if="directoryModalRecord.deleted_at" class="mono">{{directoryModalRecord.deleted_at}}</dd>
             <dt>Custom fields</dt><dd><pre class="directory-detail-json">{{pretty(directoryModalRecord.custom_fields)}}</pre></dd>
+          </dl>
+          <dl v-else-if="directoryModalKind==='access'">
+            <dt>Access record ID</dt><dd>#{{directoryModalRecord.id}}</dd>
+            <dt>Client</dt><dd><a class="entity-link" :href="entityHref('clients',directoryModalRecord.client_id)"
+              @click.prevent="openAdminRelatedDetails('clients',directoryModalRecord.client_id)">{{directoryModalRecord.client_email}}</a>
+              <small class="directory-detail-subtle">#{{directoryModalRecord.client_id}}</small></dd>
+            <dt>Product</dt><dd><a class="entity-link" :href="entityHref('products',directoryModalRecord.product_id)"
+              @click.prevent="openAdminRelatedDetails('products',directoryModalRecord.product_id)">{{directoryModalRecord.product_name}}</a>
+              <small class="directory-detail-subtle">#{{directoryModalRecord.product_id}}</small></dd>
+            <dt v-if="directoryModalRecord.brand_name">Brand</dt>
+            <dd v-if="directoryModalRecord.brand_name">
+              <a v-if="directoryModalRecord.brand_id" class="entity-link"
+                :href="entityHref('brands',directoryModalRecord.brand_id)"
+                @click.prevent="openAdminRelatedDetails('brands',directoryModalRecord.brand_id)">{{directoryModalRecord.brand_name}}</a>
+              <span v-else>{{directoryModalRecord.brand_name}}</span>
+              <small v-if="directoryModalRecord.brand_id" class="directory-detail-subtle">#{{directoryModalRecord.brand_id}}</small>
+            </dd>
+            <dt>Current permission</dt><dd><span :class="['pill',directoryModalRecord.active?'active':'inactive']">{{directoryModalRecord.active?'Granted':'Not currently granted (revoked)'}}</span></dd>
+            <dt>Audit event</dt><dd>#{{directoryModalRecord.event_id}} · {{directoryModalRecord.action}}</dd>
+            <dt>Event time (UTC)</dt><dd class="mono">{{directoryModalRecord.occurred_at}}</dd>
+            <dt>Before snapshot</dt><dd><pre class="directory-detail-json">{{pretty(safeAuditFields(directoryModalRecord.before_data))}}</pre></dd>
+            <dt>After snapshot</dt><dd><pre class="directory-detail-json">{{pretty(safeAuditFields(directoryModalRecord.after_data))}}</pre></dd>
           </dl>
           <dl v-else>
             <dt>Event ID</dt><dd>#{{directoryModalRecord.id}}</dd>
