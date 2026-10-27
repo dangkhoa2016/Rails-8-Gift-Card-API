@@ -36,6 +36,35 @@ curl -sS -X POST http://localhost:3000/api/v1/admin/clients/CLIENT_ID/product_ac
 
 Replace IDs with the values returned by preceding calls.
 
+## Admin: create and cancel a Card for a selected Client
+
+These optional Admin-only endpoints use the actual Client ID (not an impersonated Client token).
+First check the Client's eligible Product IDs with the Admin product-access endpoint above.
+The Client must be active to issue a Card. These writes create real Card and audit history.
+
+```bash
+# Create a Card for the chosen Client; expect HTTP 201.
+curl -sS -X POST http://localhost:3000/api/v1/admin/clients/CLIENT_ID/cards \
+  -H "Authorization: Bearer $ADMIN_TOKEN" \
+  -H 'Idempotency-Key: admin-demo-order-001' \
+  -H 'Content-Type: application/json' \
+  -d '{"product_id":PRODUCT_ID,"with_pin":false}'
+
+# Repeat the identical request with the same Client, key and body for HTTP 200.
+# Reusing the key with a different body returns HTTP 409.
+
+# Cancel only a Card owned by that Client; expect HTTP 200.
+curl -sS -X POST http://localhost:3000/api/v1/admin/clients/CLIENT_ID/cards/CARD_ID/cancel \
+  -H "Authorization: Bearer $ADMIN_TOKEN"
+```
+
+Admin never receives the PIN (even if `with_pin` is true). The Client can still
+reveal their own PIN using the existing password-confirmed endpoint. A Client JWT
+cannot call the Admin routes. The Admin user is the actor of issue/cancel audit
+events; payout snapshots and the original Client-scoped idempotency key rules
+remain intact. Repeat cancellation returns HTTP 409; an unrelated Client/Card
+combination returns HTTP 404.
+
 ## Client: catalog, issue, exact retry and cancel
 
 ```bash
@@ -160,7 +189,7 @@ curl -sS 'http://localhost:3000/api/v1/client/cards?page=2&per_page=25&status=ca
   -H "Authorization: Bearer $CLIENT_TOKEN"
 ```
 
-Check `meta.page`, `meta.per_page`, and `meta.total`; verify that page IDs differ. The API accepts `per_page=1..100` (higher values are capped). For the seeded Demo Gift Cards Brand, the nested Admin Products endpoint contains more than 100 Products. The built-in Demo **API Console** can send the same requests without installing curl. Standard directory lists currently show only the first page; they do not yet offer visible pagination controls.
+Check `meta.page`, `meta.per_page`, and `meta.total`; verify that page IDs differ. The API accepts `per_page=1..100` (higher values are capped). For the seeded primary gift-card Brand, the nested Admin Products endpoint contains more than 100 Products. The built-in Demo **API Console** can send the same requests without installing curl. Standard directory lists currently show only the first page; they do not yet offer visible pagination controls.
 
 ### Search within the authenticated Client's Cards
 

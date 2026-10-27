@@ -24,6 +24,81 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       expect(response.headers["cache-control"]).to include("no-store")
     end
 
+    it "explains issuance creation, idempotent replay, and key conflicts only in API Console" do
+      get "/demo/index.html"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        'v-if="consoleIssuanceOutcome"',
+        'consoleIssuanceOutcome.title',
+        'consoleIssuanceOutcome.description',
+        'consoleIssuanceOutcome.cardId',
+        'class="console-error-summary"',
+        'v-else class="response-pre tall"'
+      )
+
+      get "/demo/app.js"
+      expect(response).to have_http_status(:ok)
+      expect(response.body.dup.force_encoding(Encoding::UTF_8)).to include(
+        "consoleIssuanceOutcome()",
+        'method !== "POST"',
+        '"/api/v1/client/cards"',
+        'status === 201',
+        'status === 200',
+        'status === 409 && body?.error?.code === "idempotency_key_reused"',
+        '201 Created — New gift card issued',
+        '200 OK — Idempotent replay',
+        'Existing Card returned. No new Card was issued.',
+        '409 Conflict — Idempotency key reused',
+        'No new Card was issued.'
+      )
+
+      get "/demo/style.css"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        ".console-issuance-outcome.replay",
+        ".console-issuance-outcome.created",
+        ".console-issuance-outcome.conflict"
+      )
+    end
+
+    it "scrolls the API Console to top after successful and failed sends" do
+      get "/demo/app.js"
+      expect(response).to have_http_status(:ok)
+      script = response.body
+      console_method = script.split("async sendConsole() {", 2).last.split("\n      }", 2).first
+      expect(console_method).to include(
+        "try {",
+        "await this.execute(async () => {",
+        "this.response = { method, path, body: res.payload, status: res.status, duration: res.duration };",
+        "this.rememberApiError(error, method, path);",
+        "finally {",
+        "await this.$nextTick();",
+        "this.scrollToTop();"
+      )
+      expect(console_method.index("this.scrollToTop();")).to be > console_method.index("await this.execute(")
+      expect(console_method).not_to include("this.consoleForm =")
+    end
+
+    it "provides Admin-only Card creation and cancellation templates" do
+      get "/demo/app.js"
+      expect(response).to have_http_status(:ok)
+      expect(response.body.dup.force_encoding(Encoding::UTF_8)).to include(
+        'id: "admin-issue-card", group: "cards"',
+        'id: "admin-cancel-card", group: "cards"',
+        'label: "Create a Card for a Client"',
+        'label: "Cancel a Client\'s Card"',
+        'path: "/api/v1/admin/clients/:client_id/cards"',
+        'path: "/api/v1/admin/clients/:client_id/cards/:card_id/cancel"',
+        'uniqueKey: true',
+        'Create or cancel Cards · Admin actions',
+        'this.session?.user?.role',
+        'examples.filter(t => t.group === "cards")'
+      )
+      expect(response.body).to include(
+        '/^\\/api\\/v1\\/admin\\/clients\\/[1-9]\\d*\\/cards$/.test(endpoint || "")'
+      )
+    end
+
     it "serves the HTML shell with a pinned Vue 3 production CDN global build" do
       get "/demo/index.html"
       expect(response).to have_http_status(:ok)

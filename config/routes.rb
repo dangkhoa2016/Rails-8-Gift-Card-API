@@ -18,6 +18,9 @@ Rails.application.routes.draw do
         get "reports/cards", to: "reports#cards"
         resources :clients, only: [ :index, :show, :create, :update ] do
           resources :product_accesses, only: [ :index, :create, :destroy ]
+          resources :cards, only: [ :create ] do
+            post :cancel, on: :member
+          end
         end
       end
       namespace :client do

@@ -10,11 +10,12 @@ module Cards
       end
     end
 
-    def self.call(client:, card_id:, request:)
-      new(client:, card_id:, request:).call
+    def self.call(client:, card_id:, request:, actor: client)
+      new(client:, card_id:, request:, actor:).call
     end
 
-    def initialize(client:, card_id:, request:)
+    def initialize(client:, card_id:, request:, actor: client)
+      @actor = actor
       @client = client
       @card_id = card_id
       @request = request
@@ -28,13 +29,13 @@ module Cards
         raise Refused.new("already_cancelled") unless card.issued?
         before = card.attributes
         card.update!(status: "cancelled", cancelled_at: Time.current)
-        Audit::RecordEvent.call(actor: @client, request: @request, action: "card.cancelled",
+        Audit::RecordEvent.call(actor: @actor, request: @request, action: "card.cancelled",
           record: card, before_data: before, after_data: card)
       end
       card
     rescue Refused => error
       # A declined cancellation must be committed after the success transaction rolls back.
-      AuditEvent.create!(actor: @client, action: "card.cancel_refused", record_type: "Card",
+      AuditEvent.create!(actor: @actor, action: "card.cancel_refused", record_type: "Card",
         record_id: card&.id, outcome: "refused", reason_code: error.code,
         ip_address: @request.remote_ip, user_agent: @request.user_agent)
       raise

@@ -17,11 +17,12 @@ module Cards
 
     MAX_ACTIVATION_COLLISIONS = 3
 
-    def self.call(client:, product_id:, with_pin:, idempotency_key:, request:)
-      new(client:, product_id:, with_pin:, idempotency_key:, request:).call
+    def self.call(client:, product_id:, with_pin:, idempotency_key:, request:, actor: client)
+      new(client:, product_id:, with_pin:, idempotency_key:, request:, actor:).call
     end
 
-    def initialize(client:, product_id:, with_pin:, idempotency_key:, request:)
+    def initialize(client:, product_id:, with_pin:, idempotency_key:, request:, actor: client)
+      @actor = actor
       @client = client
       @product_id = product_id
       @with_pin = with_pin
@@ -63,7 +64,7 @@ module Cards
             payout_amount_snapshot: payout,
             issued_at: Time.current
           )
-          Audit::RecordEvent.call(actor: @client, request: @request,
+          Audit::RecordEvent.call(actor: @actor, request: @request,
             action: "card.issued", record: card, after_data: card)
           Result.new(card: card, created: true)
         end
