@@ -106,6 +106,64 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
       )
     end
 
+    it "provides a permission-scoped Client Catalog storefront with read-only discovery" do
+      get "/demo/index.html"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        "class=\"catalog-workspace\"",
+        "catalog-hero",
+        "catalog-highlights",
+        "catalogBrandOptions.length",
+        "catalogCurrencies.length",
+        "catalogFeaturedBrands",
+        "catalog-brand-chip",
+        "catalog-filter-form",
+        "catalog-applied",
+        "catalogVisibleProducts",
+        "catalog-product-card",
+        "catalog-product-value",
+        "catalogPageCount",
+        "catalog-pagination",
+        'v-model.number="catalogPerPage"',
+        'v-model="catalogSort"',
+        'changeCatalogPage(catalogPage+1)',
+        'navigateTo(\'catalog-brand\',p.brand_id)',
+        'navigateTo(\'issue-product\',p.id)'
+      )
+
+      get "/demo/app.js"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        'catalogSort: "name", catalogPage: 1, catalogPerPage: 12',
+        'catalogDirectoryLoaded: false',
+        "catalogBrandOptions()", "catalogFeaturedBrands()", "catalogCurrencies()",
+        "catalogVisibleProducts()", "catalogPageCount()", "async changeCatalogPage(page)",
+        "async fetchCatalog()", "async fetchIssueCatalog()",
+        "this.catalogDirectory = baseline.payload.data;",
+        'this.request("GET", apiRoot + "client/catalog?" + params)',
+        'params.set("brand_id", String(brandId))',
+        "this.catalogAppliedBrandId = brandId;",
+        'this.catalogPage = 1;',
+        "chooseCatalogBrand(id)",
+        "this.catalogQuery = \"\";",
+        "this.catalogCurrency = \"\";",
+        "this.catalogBrandId = \"\";",
+        'await this.go("issue", { selectedProductId: id })'
+      )
+      expect(response.body).to include(
+        'String(a.currency).localeCompare(String(b.currency))',
+        'Number(a.face_value) - Number(b.face_value)'
+      )
+
+      get "/demo/style.css"
+      expect(response).to have_http_status(:ok)
+      expect(response.body).to include(
+        ".catalog-workspace", ".catalog-hero", ".catalog-highlights",
+        ".catalog-brand-chip", ".catalog-product-grid", ".catalog-product-card",
+        ".catalog-pagination", "@media(max-width:610px)"
+      )
+    end
+
     it "scrolls the API Console to top after successful and failed sends" do
       get "/demo/app.js"
       expect(response).to have_http_status(:ok)
@@ -534,7 +592,7 @@ RSpec.describe "Optional Vue reviewer UI", type: :request do
         'this.go("issue", { selectedProductId: id })',
         'this.go("catalog", { brandId: id })',
         "async fetchIssueCatalog()", 'this.issueCatalog = res.payload.data || [];',
-        'if (this.tab === "catalog") await this.fetchCatalog();',
+        'if (this.tab === "catalog") {', 'this.catalogDirectoryLoaded = false;',
         'if (this.tab === "issue") await this.fetchIssueCatalog();',
         'this.catalogBrandId = brandId || "";',
         'this.issueForm.product_id = selectedProductId || "";'
