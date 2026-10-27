@@ -2,7 +2,7 @@
 
 This document distinguishes clarified business rules from implementation choices.
 
-## Business rules clarified by Gift Card API
+## Gift-card business rules
 
 - The application generates activation numbers and optional PINs; no external provider integration is necessary.
 - Safe retries accept either a unique reference number or an `Idempotency-Key` header.

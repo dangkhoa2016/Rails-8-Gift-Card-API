@@ -17,7 +17,7 @@ module Api
             idempotency_key: request.headers["Idempotency-Key"], request: request,
             actor: current_user)
           response.headers["Cache-Control"] = "no-store, private"
-          render json: { data: serialize(result.card) }, status: result.created ? :created : :ok
+          render json: { data: Cards::Serializer.call(result.card) }, status: result.created ? :created : :ok
         rescue Cards::Issue::Refused => error
           AuditEvent.create!(actor: current_user, action: "card.issue_refused",
             record_type: "Card", outcome: "refused", reason_code: error.code,
@@ -31,22 +31,10 @@ module Api
           card = Cards::Cancel.call(client: client, card_id: params[:id],
             request: request, actor: current_user)
           response.headers["Cache-Control"] = "no-store, private"
-          render json: { data: serialize(card) }
+          render json: { data: Cards::Serializer.call(card) }
         rescue Cards::Cancel::Refused => error
           render json: { error: { code: error.code, message: error.message } },
             status: error.http_status
-        end
-
-        private
-
-        def serialize(card)
-          card.as_json(only: %i[id client_id product_id status activation_number
-            face_value_snapshot currency_snapshot payout_rate_snapshot
-            payout_amount_snapshot issued_at cancelled_at]).merge(
-              product_name: card.product.name,
-              brand_name: card.product.brand.name,
-              has_pin: card.read_attribute_before_type_cast(:pin).present?
-            )
         end
       end
     end

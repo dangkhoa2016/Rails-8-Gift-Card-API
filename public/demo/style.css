@@ -61,13 +61,13 @@ td{white-space:normal;min-width:80px}td .mono{overflow-wrap:anywhere}th{white-sp
 
 /* Loading indicators: visual spinner, accessibility status, and reduced-motion fallback. */
 .loading-notice{display:flex;align-items:center;gap:11px;position:relative;overflow:hidden;border-radius:12px;border:1px solid #d5e3fa;background:#f1f7ff;color:#2b5ca5;font-weight:750;font-size:13px;padding:13px 15px;margin-bottom:17px;min-height:52px}
-.loading-icon{flex:none;animation:gift_card_api-spin .85s linear infinite}
-.loading-track{position:absolute;bottom:0;left:0;height:3px;width:38%;background:#4b86df;border-radius:99px;animation:gift_card_api-progress 1.4s ease-in-out infinite}
+.loading-icon{flex:none;animation:giftcard-spin .85s linear infinite}
+.loading-track{position:absolute;bottom:0;left:0;height:3px;width:38%;background:#4b86df;border-radius:99px;animation:giftcard-progress 1.4s ease-in-out infinite}
 .scroll.is-loading{min-height:100px;opacity:.4;pointer-events:none}
 .btn.processing{position:relative;gap:9px;cursor:progress}
-.btn.processing:before{content:"";display:inline-block;flex:none;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:gift_card_api-spin .8s linear infinite}
-@keyframes gift_card_api-spin{to{transform:rotate(360deg)}}
-@keyframes gift_card_api-progress{0%{transform:translateX(-110%)}100%{transform:translateX(380%)}}
+.btn.processing:before{content:"";display:inline-block;flex:none;width:14px;height:14px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;animation:giftcard-spin .8s linear infinite}
+@keyframes giftcard-spin{to{transform:rotate(360deg)}}
+@keyframes giftcard-progress{0%{transform:translateX(-110%)}100%{transform:translateX(380%)}}
 @media(prefers-reduced-motion:reduce){.loading-icon,.loading-track,.btn.processing:before{animation:none}.loading-track{width:100%;opacity:.5}}
 
 

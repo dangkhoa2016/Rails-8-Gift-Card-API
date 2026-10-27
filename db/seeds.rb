@@ -14,7 +14,7 @@ if Rails.env.development?
     # Four-digit, random-looking labels with a fixed seed identity. A fresh
     # random number on every run would rename or duplicate the same fixtures.
     suffix = lambda do |kind, index|
-      format("%04d", Digest::SHA256.hexdigest("gift_card_api-seed-#{kind}-#{index}").first(12).to_i(16) % 10_000)
+      format("%04d", Digest::SHA256.hexdigest("gift-card-api-seed-#{kind}-#{index}").first(12).to_i(16) % 10_000)
     end
 
     # All counts exceed API's default 25 items/page; major lists also exceed

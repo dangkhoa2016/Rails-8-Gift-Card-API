@@ -5,15 +5,7 @@ module Cards
   class Issue
     Result = Struct.new(:card, :created, keyword_init: true)
 
-    class Refused < StandardError
-      attr_reader :code, :http_status
-
-      def initialize(code, http_status: :unprocessable_content)
-        @code = code
-        @http_status = http_status
-        super(code.tr("_", " "))
-      end
-    end
+    class Refused < Cards::Refused; end
 
     MAX_ACTIVATION_COLLISIONS = 3
 
@@ -45,7 +37,7 @@ module Cards
             return Result.new(card: previous, created: false)
           end
 
-          product = eligible_products.find_by(id: @product_id)
+          product = Catalog::EligibleProducts.call(client: @client).find_by(id: @product_id)
           raise Refused.new("product_unavailable") unless product
 
           rate = BigDecimal(@client.payout_rate.to_s)
@@ -102,12 +94,6 @@ module Cards
       @fingerprint = Digest::SHA256.hexdigest(
         JSON.generate({ product_id: @product_id, with_pin: @with_pin })
       )
-    end
-
-    def eligible_products
-      Product.joins(:brand, :product_accesses)
-        .where(product_accesses: { client_id: @client.id },
-          state: "active", deleted_at: nil, brands: { state: "active" })
     end
 
     def advisory_lock_id

@@ -61,13 +61,32 @@ RSpec.describe "Client catalog search and filtering", type: :request do
     expect(response.parsed_body.fetch("data").pluck("id")).to eq([ shop_usd.id ])
   end
 
+  it "paginates only the authorised catalog and reports filtered totals" do
+    get "/api/v1/client/catalog", headers: headers_for(client), params: { page: 1, per_page: 1 }
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("meta")).to eq("page" => 1, "per_page" => 1, "total" => 3)
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ coffee_usd.id ])
+
+    get "/api/v1/client/catalog", headers: headers_for(client), params: { page: 2, per_page: 1 }
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ coffee_eur.id ])
+
+    get "/api/v1/client/catalog", headers: headers_for(other_client), params: { per_page: 1 }
+    expect(response.parsed_body.fetch("meta").fetch("total")).to eq(1)
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ not_assigned.id ])
+
+    get "/api/v1/client/catalog", headers: headers_for(client),
+      params: { q: "latte", currency: "USD", per_page: 1000 }
+    expect(response.parsed_body.fetch("meta")).to eq("page" => 1, "per_page" => 100, "total" => 1)
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ coffee_usd.id ])
+  end
+
   it "rejects invalid filter values with a structured JSON error" do
     get "/api/v1/client/catalog", headers: headers_for(client), params: { brand_id: "-12" }
     expect(response).to have_http_status(:unprocessable_content)
-    expect(response.parsed_body.dig("error", "code")).to eq("invalid_catalog_filter")
+    expect(response.parsed_body.dig("error", "code")).to eq("invalid_filter")
 
     get "/api/v1/client/catalog", headers: headers_for(client), params: { currency: "USDD" }
     expect(response).to have_http_status(:unprocessable_content)
-    expect(response.parsed_body.dig("error", "code")).to eq("invalid_catalog_filter")
+    expect(response.parsed_body.dig("error", "code")).to eq("invalid_filter")
   end
 end
