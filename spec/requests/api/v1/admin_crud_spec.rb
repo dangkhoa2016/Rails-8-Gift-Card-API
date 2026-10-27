@@ -22,6 +22,23 @@ RSpec.describe "Admin management endpoints", type: :request do
     expect(event.after_data.fetch("name")).to eq("Updated brand")
   end
 
+  it "rejects malformed Brand searches without raising an internal error" do
+    [ { q: [ "not-a-string" ] }, { q: { nested: "value" } },
+      { q: "x" * 101 } ].each do |filter|
+      get "/api/v1/admin/brands", headers: headers, params: filter
+      expect(response).to have_http_status(:unprocessable_content)
+      expect(response.parsed_body.dig("error", "code")).to eq("invalid_filter")
+    end
+
+    get "/api/v1/admin/brands", headers: headers, params: { q: "existing" }
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.fetch("data").pluck("id")).to eq([ brand.id ])
+
+    get "/api/v1/admin/brands", headers: headers, params: { q: "   " }
+    expect(response).to have_http_status(:ok)
+    expect(response.parsed_body.dig("meta", "total")).to eq(1)
+  end
+
   it "rejects more than five brand custom fields and unknown states" do
     post "/api/v1/admin/brands", headers: headers,
       params: { name: "Wrong", custom_fields: { a: 1, b: 2, c: 3, d: 4, e: 5, f: 6 } }, as: :json

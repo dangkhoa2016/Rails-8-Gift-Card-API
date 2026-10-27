@@ -28,6 +28,23 @@ RSpec.describe "Client card issuance and safe retries", type: :request do
     expect(event.after_data.keys).not_to include("pin", "password", "activation_number")
   end
 
+  it "prevents caching of responses containing PINs on creation and exact replay" do
+    2.times do |attempt|
+      post "/api/v1/client/cards", headers: headers,
+        params: { product_id: product.id, with_pin: true }, as: :json
+      expect(response).to have_http_status(attempt.zero? ? :created : :ok)
+      expect(response.headers.fetch("Cache-Control")).to include("no-store", "private")
+      expect(response.headers.fetch("Pragma")).to eq("no-cache")
+      expect(response.parsed_body.dig("data", "pin")).to match(/\A[0-9]{6}\z/)
+    end
+
+    post "/api/v1/client/cards", headers: headers,
+      params: { product_id: product.id, with_pin: false }, as: :json
+    expect(response).to have_http_status(:conflict)
+    expect(response.headers.fetch("Cache-Control")).to include("no-store")
+    expect(Card.count).to eq(1)
+  end
+
   it "replays the original result without another card or issue success event" do
     2.times do |index|
       post "/api/v1/client/cards", headers: headers,

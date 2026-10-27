@@ -77,6 +77,10 @@ module Api
         end
 
         def create
+          # Issuance and idempotent replay may return a secret PIN.
+          # Never permit an intermediary or browser to store this response.
+          response.headers["Cache-Control"] = "no-store, private"
+          response.headers["Pragma"] = "no-cache"
           result = Cards::Issue.call(client: current_user,
             product_id: params[:product_id], with_pin: params[:with_pin],
             idempotency_key: request.headers["Idempotency-Key"], request: request)

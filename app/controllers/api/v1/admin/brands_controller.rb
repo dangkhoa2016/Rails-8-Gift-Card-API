@@ -4,7 +4,16 @@ module Api
       class BrandsController < BaseController
         def index
           scope = Brand.order(:id)
-          scope = scope.where("name ILIKE ?", "%#{Brand.sanitize_sql_like(params[:q])}%") if params[:q].present?
+          if request.query_parameters.key?("q")
+            query = request.query_parameters["q"]
+            unless query.is_a?(String) && query.length <= 100
+              return render json: { error: { code: "invalid_filter",
+                message: "Search must be a text value of up to 100 characters." } },
+                status: :unprocessable_content
+            end
+            term = query.strip
+            scope = scope.where("name ILIKE ?", "%#{Brand.sanitize_sql_like(term)}%") if term.present?
+          end
           records, meta = paginate(scope)
           render json: { data: records.map { |record| serialize(record) }, meta: meta }
         end
